@@ -14,12 +14,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type {
-  WorkItem, Project, State, Transition, AppRole, EvidencePayload, AppSettings, User, Team, AppUser,
+  WorkItem, Project, State, Transition, AppRole, EvidencePayload, AppSettings, Team, AppUser,
 } from "../../types/domain";
 import {
   getWorkItems, getStates, getTransitions, patchWorkItemState,
-  getSettings, logUIEvent, getUsers,
+  getSettings, logUIEvent,
 } from "../../services/workItemService";
+import { listAppUsers } from "../../services/userService";
 import { getProjects } from "../../services/projectService";
 import { listTeams }   from "../../services/teamService";
 import { useEffectiveUser } from "../../auth/ImpersonationContext";
@@ -94,7 +95,7 @@ interface PendingAssignment {
   workItemId: string;
   fromStateId: string;  // snapshot para rollback
   toStateId: string;
-  newRole: AppRole;
+  newRole: AppRole[];
   evidence?: EvidencePayload;
 }
 
@@ -145,7 +146,7 @@ export const KanbanPage: React.FC = () => {
   const [states,      setStates]      = useState<State[]>([]);
   const [transitions, setTransitions] = useState<Transition[]>([]);
   const [settings,    setSettings]    = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [users,       setUsers]       = useState<User[]>([]);
+  const [users,       setUsers]       = useState<AppUser[]>([]);
   const [teams,       setTeams]       = useState<Team[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState<string | null>(null);
@@ -244,7 +245,7 @@ export const KanbanPage: React.FC = () => {
         getStates(),
         getTransitions(),
         getSettings().catch(() => DEFAULT_SETTINGS),
-        getUsers().catch(() => [] as User[]),
+        listAppUsers().catch(() => [] as AppUser[]),
         listTeams({ isActive: true }).catch(() => [] as Team[]),
       ]);
       setProjects(prjs);
@@ -603,12 +604,13 @@ export const KanbanPage: React.FC = () => {
     }
 
     // requireUserAssignment o cambio de rol: abrir modal de asignación
-    const newRole = transition.assignToRole as AppRole | undefined;
+    const assignToRoles = transition.assignToRole ?? [];
+    const newRole = assignToRoles[0] as AppRole | undefined;
     const roleChanges = newRole && newRole !== item.assignedToRole;
     if (transition.requireUserAssignment || roleChanges) {
       setPendingAssignment({
         workItemId: item.id, fromStateId: item.stateId, toStateId,
-        newRole: newRole ?? item.assignedToRole,
+        newRole: assignToRoles.length > 0 ? assignToRoles : (item.assignedToRole ? [item.assignedToRole] : []),
       });
       return;
     }
@@ -634,7 +636,7 @@ export const KanbanPage: React.FC = () => {
     const transition = transitions.find(
       (t) => t.fromStateId === originalStateId && t.toStateId === toStateId,
     );
-    const newRole = transition?.assignToRole as AppRole | undefined;
+    const newRole = transition?.assignToRole?.[0] as AppRole | undefined;
 
     // Auto-determinar team según el nuevo rol
     let newTeamId: string | null | undefined;
@@ -739,12 +741,13 @@ export const KanbanPage: React.FC = () => {
     const { workItemId, fromStateId, toStateId, transition } = pendingMove;
     setPendingMove(null);
     const item = workItems.find((w) => w.id === workItemId);
-    const newRole = transition.assignToRole as AppRole | undefined;
+    const assignToRoles = transition.assignToRole ?? [];
+    const newRole = assignToRoles[0] as AppRole | undefined;
     const roleChanges = item && newRole && newRole !== item.assignedToRole;
     if (item && (transition.requireUserAssignment || roleChanges)) {
       setPendingAssignment({
         workItemId, fromStateId, toStateId,
-        newRole: newRole ?? item.assignedToRole,
+        newRole: assignToRoles.length > 0 ? assignToRoles : (item.assignedToRole ? [item.assignedToRole] : []),
         evidence,
       });
     } else {

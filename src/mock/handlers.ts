@@ -454,14 +454,14 @@ export const handlers = [
     if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin puede restaurar la máquina de estados");
     const before = JSON.parse(JSON.stringify(store.transitions));
     const baseline = [
-      { id: "tr-new-ref",   fromStateId: "st-new",  toStateId: "st-ref",  allowedRoles: ["Admin","IT AirEuropa"], assignToRole: "IT AirEuropa", autoAssignTeam: true,  requireUserAssignment: false, requireEvidence: false, evidenceTypes: [], requireComment: false, confirmMove: false },
-      { id: "tr-ref-prog",  fromStateId: "st-ref",  toStateId: "st-prog", allowedRoles: ["Admin","IT AirEuropa"], assignToRole: "Proveedor",    autoAssignTeam: true,  requireUserAssignment: true,  requireEvidence: false, evidenceTypes: [], requireComment: false, confirmMove: false },
-      { id: "tr-prog-rft",  fromStateId: "st-prog", toStateId: "st-rft",  allowedRoles: ["Admin","Proveedor"],    assignToRole: "IT AirEuropa", autoAssignTeam: true,  requireUserAssignment: true,  requireEvidence: true,  evidenceTypes: ["link","comment","file"], requireComment: false, confirmMove: false },
-      { id: "tr-rft-test",  fromStateId: "st-rft",  toStateId: "st-test", allowedRoles: ["Admin","IT AirEuropa"], assignToRole: "Usuario",      autoAssignTeam: true,  requireUserAssignment: true,  requireEvidence: false, evidenceTypes: [], requireComment: false, confirmMove: false },
-      { id: "tr-test-acc",  fromStateId: "st-test", toStateId: "st-acc",  allowedRoles: ["Admin","IT AirEuropa","Usuario"], assignToRole: "IT AirEuropa", autoAssignTeam: true, requireUserAssignment: false, requireEvidence: true, evidenceTypes: ["comment"], requireComment: false, confirmMove: false },
-      { id: "tr-acc-cls",   fromStateId: "st-acc",  toStateId: "st-cls",  allowedRoles: ["Admin","IT AirEuropa"], assignToRole: "IT AirEuropa", autoAssignTeam: true,  requireUserAssignment: false, requireEvidence: false, evidenceTypes: [], requireComment: true, confirmMove: true },
-      { id: "tr-prog-blk",  fromStateId: "st-prog", toStateId: "st-blk",  allowedRoles: ["Admin","IT AirEuropa","Proveedor"], assignToRole: "IT AirEuropa", autoAssignTeam: true, requireUserAssignment: false, requireEvidence: false, evidenceTypes: [], requireComment: true, confirmMove: false },
-      { id: "tr-blk-prog",  fromStateId: "st-blk",  toStateId: "st-prog", allowedRoles: ["Admin","IT AirEuropa"], assignToRole: "Proveedor",    autoAssignTeam: true,  requireUserAssignment: true,  requireEvidence: false, evidenceTypes: [], requireComment: false, confirmMove: false },
+      { id: "tr-new-ref",   fromStateId: "st-new",  toStateId: "st-ref",  allowedRoles: ["Admin","IT AirEuropa"], assignToRole: ["IT AirEuropa"], autoAssignTeam: true,  requireUserAssignment: false, requireEvidence: false, evidenceTypes: [], requireComment: false, confirmMove: false },
+      { id: "tr-ref-prog",  fromStateId: "st-ref",  toStateId: "st-prog", allowedRoles: ["Admin","IT AirEuropa"], assignToRole: ["Proveedor"],    autoAssignTeam: true,  requireUserAssignment: true,  requireEvidence: false, evidenceTypes: [], requireComment: false, confirmMove: false },
+      { id: "tr-prog-rft",  fromStateId: "st-prog", toStateId: "st-rft",  allowedRoles: ["Admin","Proveedor"],    assignToRole: ["IT AirEuropa"], autoAssignTeam: true,  requireUserAssignment: true,  requireEvidence: true,  evidenceTypes: ["link","comment","file"], requireComment: false, confirmMove: false },
+      { id: "tr-rft-test",  fromStateId: "st-rft",  toStateId: "st-test", allowedRoles: ["Admin","IT AirEuropa"], assignToRole: ["Usuario"],      autoAssignTeam: true,  requireUserAssignment: true,  requireEvidence: false, evidenceTypes: [], requireComment: false, confirmMove: false },
+      { id: "tr-test-acc",  fromStateId: "st-test", toStateId: "st-acc",  allowedRoles: ["Admin","IT AirEuropa","Usuario"], assignToRole: ["IT AirEuropa"], autoAssignTeam: true, requireUserAssignment: false, requireEvidence: true, evidenceTypes: ["comment"], requireComment: false, confirmMove: false },
+      { id: "tr-acc-cls",   fromStateId: "st-acc",  toStateId: "st-cls",  allowedRoles: ["Admin","IT AirEuropa"], assignToRole: ["IT AirEuropa"], autoAssignTeam: true,  requireUserAssignment: false, requireEvidence: false, evidenceTypes: [], requireComment: true, confirmMove: true },
+      { id: "tr-prog-blk",  fromStateId: "st-prog", toStateId: "st-blk",  allowedRoles: ["Admin","IT AirEuropa","Proveedor"], assignToRole: ["IT AirEuropa"], autoAssignTeam: true, requireUserAssignment: false, requireEvidence: false, evidenceTypes: [], requireComment: true, confirmMove: false },
+      { id: "tr-blk-prog",  fromStateId: "st-blk",  toStateId: "st-prog", allowedRoles: ["Admin","IT AirEuropa"], assignToRole: ["Proveedor"],    autoAssignTeam: true,  requireUserAssignment: true,  requireEvidence: false, evidenceTypes: [], requireComment: false, confirmMove: false },
     ];
     store.transitions.splice(0, store.transitions.length, ...(baseline as typeof store.transitions));
     (store.auditLog as unknown[]).push({
@@ -605,30 +605,36 @@ export const handlers = [
     }
 
     // ── Validar assignedToUserId si la transición cambia de rol o requiere asignación ─────
-    const newRole = (transition.assignToRole ?? item.assignedToRole) as AppRole;
-    const roleChanges = newRole !== item.assignedToRole;
+    const assignToRoles = transition.assignToRole ?? [];
+    // El rol destino es el del usuario seleccionado (si hay alguno), o assignToRoles[0], o el rol actual
+    let resolvedNewRole: AppRole = (assignToRoles[0] ?? item.assignedToRole) as AppRole;
+
+    const roleChanges = assignToRoles.length > 0 && !assignToRoles.includes(item.assignedToRole as AppRole);
     const requiresUser = transition.requireUserAssignment || roleChanges;
 
     if (requiresUser) {
       if (!assignedToUserId) {
         return err(
           400,
-          `Esta transición requiere seleccionar un usuario asignado (rol: "${newRole}").`,
+          `Esta transición requiere seleccionar un usuario asignado (rol: "${assignToRoles.join('" o "')}").`,
         );
       }
-      // Verificar que el usuario existe y tiene el rol correcto
+      // Verificar que el usuario existe
       const targetUser = (store.appUsers as AppUser[]).find(
         (u) => u.id === assignedToUserId,
       );
       if (!targetUser) return err(404, `Usuario "${assignedToUserId}" no encontrado`);
-      if (targetUser.role !== newRole) {
+      // Validar que el rol del usuario está en assignToRoles
+      if (assignToRoles.length > 0 && !assignToRoles.includes(targetUser.role as AppRole)) {
         return err(
           400,
-          `El usuario no tiene el rol requerido "${newRole}"`,
+          `El usuario no tiene ninguno de los roles requeridos: "${assignToRoles.join('" o ""')}"`,
         );
       }
+      // El rol del WI pasa a ser el rol del usuario asignado
+      resolvedNewRole = targetUser.role as AppRole;
       // Proveedor: validar que pertenece al equipo proveedor del proyecto
-      if (newRole === "Proveedor") {
+      if (targetUser.role === "Proveedor") {
         const project = (store.projects as Project[]).find((p) => p.id === item.projectId);
         const userInProvTeam = (targetUser.teamIds ?? []).includes(project?.providerTeamId ?? "");
         if (project && project.providerTeamId && !userInProvTeam) {
@@ -639,6 +645,8 @@ export const handlers = [
         }
       }
     }
+
+    const newRole = resolvedNewRole;
 
     // Recuperar nombre del estado anterior y nuevo para el log
     const fromState = store.states.find((s) => s.id === item.stateId);

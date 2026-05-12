@@ -12,7 +12,7 @@ export interface TransitionPayload {
   fromStateId: string;
   toStateId: string;
   allowedRoles: AppRole[];
-  assignToRole?: AppRole;
+  assignToRole?: AppRole[];
   autoAssignTeam?: boolean;
   requireUserAssignment?: boolean;
   requireEvidence?: boolean;

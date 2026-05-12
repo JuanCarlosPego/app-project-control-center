@@ -191,7 +191,7 @@ const TransitionModal: React.FC<TransitionModalProps> = ({ initial, states, onSa
   const [fromStateId, setFromStateId]               = useState(initial?.fromStateId ?? "st-new");
   const [toStateId, setToStateId]                   = useState(initial?.toStateId   ?? "st-ref");
   const [allowedRoles, setAllowedRoles]             = useState<AppRole[]>(initial?.allowedRoles ?? []);
-  const [assignToRole, setAssignToRole]             = useState<AppRole | "">(initial?.assignToRole ?? "");
+  const [assignToRoles, setAssignToRoles]           = useState<AppRole[]>(initial?.assignToRole ?? []);
   const [autoAssignTeam, setAutoAssignTeam]         = useState(initial?.autoAssignTeam ?? false);
   const [requireUserAssignment, setRequireUserAssignment] = useState(initial?.requireUserAssignment ?? false);
   const [requireEvidence, setRequireEvidence]       = useState(initial?.requireEvidence ?? false);
@@ -203,6 +203,12 @@ const TransitionModal: React.FC<TransitionModalProps> = ({ initial, states, onSa
 
   const toggleRole = (role: AppRole) => {
     setAllowedRoles((prev) =>
+      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role],
+    );
+  };
+
+  const toggleAssignToRole = (role: AppRole) => {
+    setAssignToRoles((prev) =>
       prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role],
     );
   };
@@ -222,7 +228,7 @@ const TransitionModal: React.FC<TransitionModalProps> = ({ initial, states, onSa
       await onSave({
         fromStateId, toStateId,
         allowedRoles,
-        assignToRole: assignToRole || undefined,
+        assignToRole: assignToRoles.length > 0 ? assignToRoles : undefined,
         autoAssignTeam,
         requireUserAssignment,
         requireEvidence,
@@ -321,24 +327,37 @@ const TransitionModal: React.FC<TransitionModalProps> = ({ initial, states, onSa
           </div>
 
           {/* Asignación */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <label style={labelStyle}>Asignar a rol</label>
-              <select value={assignToRole} onChange={(e) => setAssignToRole(e.target.value as AppRole)} style={fieldStyle}>
-                <option value="">— Sin cambio —</option>
-                {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
+          <div>
+            <label style={labelStyle}>Asignar a rol <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(puede ser más de uno)</span></label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+              {ROLE_OPTIONS.map((role) => {
+                const active = assignToRoles.includes(role);
+                const c = ROLE_CHIP[role] ?? { bg: "#F3F2F1", text: "#323130" };
+                return (
+                  <button key={role} onClick={() => toggleAssignToRole(role)} style={{
+                    fontSize: 11, padding: "4px 10px", borderRadius: 4,
+                    background: active ? c.bg : "#F3F2F1",
+                    color: active ? c.text : "#A19F9D",
+                    border: active ? `2px solid ${c.text}` : "2px solid transparent",
+                    fontWeight: active ? 700 : 400, cursor: "pointer",
+                    fontFamily: FONT, transition: "all 120ms",
+                  }}>{role}</button>
+                );
+              })}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-              <label style={checkStyle}>
-                <input type="checkbox" checked={autoAssignTeam} onChange={(e) => setAutoAssignTeam(e.target.checked)} />
-                Auto-asignar team según rol
-              </label>
-              <label style={checkStyle}>
-                <input type="checkbox" checked={requireUserAssignment} onChange={(e) => setRequireUserAssignment(e.target.checked)} />
-                Requerir usuario concreto
-              </label>
-            </div>
+            {assignToRoles.length === 0 && (
+              <span style={{ fontSize: 10, color: "#A19F9D", fontFamily: FONT }}>Sin cambio de rol al mover</span>
+            )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={checkStyle}>
+              <input type="checkbox" checked={autoAssignTeam} onChange={(e) => setAutoAssignTeam(e.target.checked)} />
+              Auto-asignar team según rol
+            </label>
+            <label style={checkStyle}>
+              <input type="checkbox" checked={requireUserAssignment} onChange={(e) => setRequireUserAssignment(e.target.checked)} />
+              Requerir usuario concreto
+            </label>
           </div>
 
           {/* Separador */}
@@ -581,7 +600,9 @@ export const StateMachinePage: React.FC = () => {
       </td>
       {/* AssignTo */}
       <td style={{ padding: "8px 10px", verticalAlign: "middle" }}>
-        {t.assignToRole ? <RoleChip role={t.assignToRole} /> : <span style={{ color: "#C8C6C4", fontSize: 11 }}>—</span>}
+        {t.assignToRole && t.assignToRole.length > 0
+          ? <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{t.assignToRole.map((r) => <RoleChip key={r} role={r} />)}</div>
+          : <span style={{ color: "#C8C6C4", fontSize: 11 }}>—</span>}
       </td>
       {/* AutoTeam */}
       <td style={{ padding: "8px 10px", verticalAlign: "middle", textAlign: "center" }}>

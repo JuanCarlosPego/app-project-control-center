@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "appId": "7f241786-7a60-4312-9efc-89a3784c1285",
+  "appDisplayName": "SGT - Gestión y Control de Proyectos y Roadmap",
+  "region": "prod",
+  "environmentId": "8d4eb458-70b4-e902-ad69-15739a4e304d",
+  "description": "Gestión y Control de Proyectos y Roadmap",
+  "buildPath": "./dist",
+  "buildEntryPoint": "index.html",
+  "localAppUrl": "http://localhost:3000",
+  "logoPath": "Default",
+  "connectionReferences": {},
+  "databaseReferences": {}
+}

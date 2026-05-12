@@ -5,7 +5,8 @@
   "description": "Power Apps Code App - Project Control Center (Backlog)",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
+    "typecheck": "tsc",
     "preview": "vite preview"
   },
   "dependencies": {

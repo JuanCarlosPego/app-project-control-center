@@ -10,11 +10,12 @@ import {
   ArrowRightCircle, CheckCircle2, AlertTriangle,
   Clock, Layers, RefreshCw,
 } from "lucide-react";
-import type { WorkItem, Project, State, Transition, AppRole, EvidencePayload } from "../../../types/domain";
+import type { WorkItem, Project, State, Transition, AppRole, EvidencePayload, AppUser as DomainAppUser } from "../../../types/domain";
 import type { AppUser } from "../../../auth/ImpersonationContext";
 import { patchWorkItemState } from "../../../services/workItemService";
 import { canActOnWorkItem } from "../../../auth/workItemPermissions";
 import { LockBanner } from "../../../components/ui/LockBadge";
+import { AssignUserModal } from "../../kanban/components/AssignUserModal";
 
 // ── Tokens ───────────────────────────────────────────────
 const STATE_BG: Record<string, string> = {
@@ -49,7 +50,9 @@ interface Props {
   states: State[];
   transitions: Transition[];
   roles: AppRole[];  /** Usuario efectivo (para check RBAC+ownership) */
-  appUser?: AppUser | null;  onClose: () => void;
+  appUser?: AppUser | null;
+  users?: DomainAppUser[];  // para AssignUserModal
+  onClose: () => void;
   onUpdated: (wi: WorkItem) => void;
 }
 
@@ -156,7 +159,7 @@ const EvidenceInline: React.FC<EvidenceInlineProps> = ({ onSubmit, onCancel, typ
 
 // ── BacklogWorkItemDrawer ─────────────────────────────────
 export const BacklogWorkItemDrawer: React.FC<Props> = ({
-  workItem: wi, project, states, transitions, roles, appUser, onClose, onUpdated,
+  workItem: wi, project, states, transitions, roles, appUser, users = [], onClose, onUpdated,
 }) => {
   // Permiso: canActOnWorkItem ya incorpora bypass para Admin e IT AirEuropa
   const { can: canAct, reason: lockReason } = wi
@@ -168,6 +171,10 @@ export const BacklogWorkItemDrawer: React.FC<Props> = ({
   const [showStateMenu, setShowStateMenu] = useState(false);
   const [pendingTransition, setPendingTransition] = useState<{
     toStateId: string; needsEvidence: boolean; types: string[];
+    needsUserAssign: boolean; assignToRoles: AppRole[];
+  } | null>(null);
+  const [pendingUserAssign, setPendingUserAssign] = useState<{
+    toStateId: string; evidence?: EvidencePayload; assignToRoles: AppRole[];
   } | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -185,6 +192,7 @@ export const BacklogWorkItemDrawer: React.FC<Props> = ({
   useEffect(() => {
     setShowStateMenu(false);
     setPendingTransition(null);
+    setPendingUserAssign(null);
     setMoveError(null);
     setSuccess(null);
   }, [wi?.id]);
@@ -208,24 +216,28 @@ export const BacklogWorkItemDrawer: React.FC<Props> = ({
     );
     setShowStateMenu(false);
     if (!tr) return;
-    if (tr.evidenceRequired) {
-      setPendingTransition({
-        toStateId,
-        needsEvidence: true,
-        types: tr.evidenceTypes ?? ["comment"],
-      });
+    const needsEvidence = !!(tr.requireEvidence || tr.requireComment);
+    const assignToRoles = tr.assignToRole ?? [];
+    const needsUserAssign = !!(tr.requireUserAssignment || assignToRoles.length > 0);
+    if (needsEvidence) {
+      const types = tr.requireComment && !tr.requireEvidence
+        ? ["comment"]
+        : (tr.evidenceTypes ?? ["comment"]);
+      setPendingTransition({ toStateId, needsEvidence: true, types, needsUserAssign, assignToRoles });
+    } else if (needsUserAssign) {
+      setPendingUserAssign({ toStateId, assignToRoles });
     } else {
       doTransition(toStateId, undefined);
     }
   };
 
-  const doTransition = async (toStateId: string, evidence?: EvidencePayload) => {
+  const doTransition = async (toStateId: string, evidence?: EvidencePayload, assignedToUserId?: string) => {
     if (!wi) return;
     setMoving(true);
     setMoveError(null);
     setPendingTransition(null);
     try {
-      const updated = await patchWorkItemState(wi.id, { toStateId, evidence });
+      const updated = await patchWorkItemState(wi.id, { toStateId, evidence, assignedToUserId });
       onUpdated(updated);
       setSuccess(`Estado cambiado a "${getStateName(toStateId)}"`);
       setTimeout(() => setSuccess(null), 2500);
@@ -398,8 +410,11 @@ export const BacklogWorkItemDrawer: React.FC<Props> = ({
                               <span style={{ flex: 1, color: "#201F1E", fontWeight: 500 }}>
                                 {nextState?.name ?? tr.toStateId}
                               </span>
-                              {tr.evidenceRequired && (
+                              {(tr.requireEvidence || tr.requireComment) && (
                                 <span style={{ fontSize: 10, color: "#CA8B00" }}>Requiere evidencia</span>
+                              )}
+                              {tr.requireUserAssignment && (
+                                <span style={{ fontSize: 10, color: "#0078D4" }}>Asignar usuario</span>
                               )}
                             </button>
                           );
@@ -413,7 +428,14 @@ export const BacklogWorkItemDrawer: React.FC<Props> = ({
                     <div style={{ marginTop: 10 }}>
                       <EvidenceInline
                         types={pendingTransition.types}
-                        onSubmit={(ev) => doTransition(pendingTransition.toStateId, ev)}
+                        onSubmit={(ev) => {
+                          if (pendingTransition.needsUserAssign) {
+                            setPendingUserAssign({ toStateId: pendingTransition.toStateId, evidence: ev, assignToRoles: pendingTransition.assignToRoles });
+                            setPendingTransition(null);
+                          } else {
+                            doTransition(pendingTransition.toStateId, ev);
+                          }
+                        }}
                         onCancel={() => setPendingTransition(null)}
                       />
                     </div>
@@ -563,6 +585,23 @@ export const BacklogWorkItemDrawer: React.FC<Props> = ({
           </>
         )}
       </aside>
+
+      {/* ── Modal asignación de usuario (desde drawer) ── */}
+      {pendingUserAssign && wi && (
+        <AssignUserModal
+          newRole={pendingUserAssign.assignToRoles}
+          project={project}
+          users={users}
+          toStateName={states.find((s) => s.id === pendingUserAssign.toStateId)?.name ?? pendingUserAssign.toStateId}
+          fromStateName={states.find((s) => s.id === wi.stateId)?.name ?? wi.stateId}
+          onConfirm={(assignedToUserId) => {
+            const { toStateId, evidence } = pendingUserAssign;
+            setPendingUserAssign(null);
+            doTransition(toStateId, evidence, assignedToUserId);
+          }}
+          onCancel={() => setPendingUserAssign(null)}
+        />
+      )}
     </>
   );
 };

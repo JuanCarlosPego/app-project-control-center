@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { ImpersonationProvider } from "./auth/ImpersonationContext";
 import { AppFilterProvider } from "./context/AppFilterContext";
@@ -49,7 +49,7 @@ const App: React.FC = () => (
   <AuthProvider>
     <AppWithImpersonation>
     <AppFilterProvider>
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
@@ -106,7 +106,7 @@ const App: React.FC = () => (
           <Route path="*"              element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
     </AppFilterProvider>
     </AppWithImpersonation>
   </AuthProvider>

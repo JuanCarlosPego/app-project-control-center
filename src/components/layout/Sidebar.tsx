@@ -71,11 +71,25 @@ export const Sidebar: React.FC = () => {
         {!collapsed && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, overflow: "hidden", minWidth: 0 }}>
             <AppLogo />
-            <div style={{ overflow: "hidden" }}>
-              <div style={{ color: "#fff", fontSize: 13, fontWeight: 700, lineHeight: 1.2, whiteSpace: "nowrap" }}>
-                Project Center
+            <div style={{ overflow: "hidden", minWidth: 0 }}>
+              <div style={{
+                display: "inline-block",
+                fontSize: 9, fontWeight: 800, letterSpacing: "0.06em",
+                color: T.accent, background: "rgba(40,153,245,0.15)",
+                border: `1px solid rgba(40,153,245,0.35)`,
+                borderRadius: 3, padding: "1px 5px",
+                marginBottom: 3, lineHeight: 1.4,
+              }}>
+                SGT
               </div>
-              <div style={{ color: T.muted, fontSize: 10, lineHeight: 1.6 }}>Air Europa · IT</div>
+              <div style={{
+                color: "#fff", fontSize: 11.5, fontWeight: 700,
+                lineHeight: 1.3, whiteSpace: "normal",
+                wordBreak: "break-word",
+              }}>
+                Gestión y Control de Proyectos y Roadmap
+              </div>
+              <div style={{ color: T.muted, fontSize: 10, lineHeight: 1.6, marginTop: 1 }}>Air Europa · IT</div>
             </div>
           </div>
         )}

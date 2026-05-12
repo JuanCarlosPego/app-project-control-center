@@ -13,14 +13,29 @@ const container = document.getElementById('root');
 if (!container) throw new Error('No se encontró el elemento #root');
 
 async function bootstrap() {
-  // Activar MSW solo cuando VITE_USE_MOCKS=true (entorno local)
+  // Activar mocks solo cuando VITE_USE_MOCKS=true
   if (import.meta.env.VITE_USE_MOCKS === 'true') {
-    const { worker } = await import('./mock/browser');
-    await worker.start({
-      // No mostrar warning en consola para rutas no interceptadas
-      onUnhandledRequest: 'bypass',
-    });
-    console.info('[MSW] Mocks activos — leyendo datos de src/mock/db.json');
+    // Intentar Service Worker (funciona en local dev)
+    const supportsServiceWorker =
+      typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
+
+    let swStarted = false;
+    if (supportsServiceWorker) {
+      try {
+        const { worker } = await import('./mock/browser');
+        await worker.start({ onUnhandledRequest: 'bypass' });
+        swStarted = true;
+        console.info('[MSW] Service Worker activo');
+      } catch {
+        console.warn('[MSW] Service Worker no disponible, usando interceptor de fetch');
+      }
+    }
+
+    // Fallback: interceptor puro (sin SW) — funciona en Power Apps, iframes, etc.
+    if (!swStarted) {
+      const { startMockInterceptor } = await import('./mock/interceptor');
+      await startMockInterceptor();
+    }
   }
 
   createRoot(container).render(

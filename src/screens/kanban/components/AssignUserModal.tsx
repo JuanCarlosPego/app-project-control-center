@@ -11,7 +11,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { UserCheck, AlertTriangle, X, ChevronDown } from "lucide-react";
-import type { AppRole, User, Project } from "../../../types/domain";
+import type { AppRole, AppUser, Project } from "../../../types/domain";
 import { color, font, radius, shadow, spacing, zIndex } from "../../../components/ui/tokens";
 
 // ── Helpers de iniciales ──────────────────────────────────
@@ -48,12 +48,12 @@ const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
 
 // ── Props ─────────────────────────────────────────────────
 export interface AssignUserModalProps {
-  /** Rol nuevo que debe tener el usuario asignado */
-  newRole: AppRole;
+  /** Roles a los que se puede asignar (uno o varios) */
+  newRole: AppRole[];
   /** Proyecto al que pertenece el WorkItem (para filtrar por providerId) */
   project: Project | undefined;
-  /** Lista de usuarios del sistema (User[]) */
-  users: User[];
+  /** Lista de usuarios del sistema (AppUser[]) */
+  users: AppUser[];
   /** Nombre del estado destino (para el título) */
   toStateName: string;
   /** Nombre del estado origen */
@@ -64,23 +64,69 @@ export interface AssignUserModalProps {
   onCancel: () => void;
 }
 
+// ── Tarjeta de usuario seleccionable ─────────────────────
+const UserCard: React.FC<{
+  u: AppUser;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+}> = ({ u, isSelected, onSelect }) => (
+  <button
+    type="button"
+    onClick={() => onSelect(u.id)}
+    style={{
+      display: "flex", alignItems: "center", gap: spacing[3],
+      padding: `${spacing[3]}px ${spacing[4]}px`,
+      background: isSelected ? color.primaryBg : color.surface,
+      border: `1.5px solid ${isSelected ? color.primary : color.border}`,
+      borderRadius: radius.sm,
+      cursor: "pointer",
+      textAlign: "left",
+      transition: "all 140ms",
+      boxShadow: isSelected ? `0 0 0 2px ${color.primary}33` : "none",
+      width: "100%",
+    }}
+  >
+    <Avatar name={u.displayName} />
+    <div style={{ flex: 1 }}>
+      <div style={{
+        fontSize: font.size.sm, fontWeight: font.weight.medium,
+        color: isSelected ? color.primary : color.text,
+      }}>
+        {u.displayName}
+      </div>
+      <div style={{ fontSize: font.size.xs, color: color.textMuted }}>
+        {u.email}
+      </div>
+    </div>
+    {isSelected && (
+      <div style={{
+        width: 16, height: 16, borderRadius: "50%",
+        background: color.primary,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flexShrink: 0,
+      }}>
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+          <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+    )}
+  </button>
+);
+
 export const AssignUserModal: React.FC<AssignUserModalProps> = ({
   newRole, project, users, toStateName, fromStateName, onConfirm, onCancel,
 }) => {
   const [selectedUserId, setSelectedUserId] = useState("");
   const [error, setError] = useState("");
 
-  // Filtrar usuarios elegibles
+  // Filtrar usuarios elegibles (cualquier rol del array)
   const eligible = useMemo(() => {
     return users.filter((u) => {
-      // Guardia defensiva: en runtime el mock devuelve User con roles[].
-      // Si por alguna razón llega un AppUser (role singular), lo normalizamos.
-      const uRoles: string[] = u.roles ?? [(u as unknown as { role?: string }).role ?? ""];
-      if (!uRoles.includes(newRole)) return false;
-      // Si es Proveedor: debe pertenecer al equipo proveedor del proyecto
-      if (newRole === "Proveedor" && project?.providerTeamId) {
-        const userTeamIds: string[] = (u as unknown as { teamIds?: string[] }).teamIds ?? [];
-        if (!userTeamIds.includes(project.providerTeamId)) return false;
+      const matchesRole = newRole.some((r) => u.role === r);
+      if (!matchesRole) return false;
+      // Si incluye Proveedor y el usuario es Proveedor: filtrar por team del proyecto
+      if (newRole.includes("Proveedor") && u.role === "Proveedor" && project?.providerTeamId) {
+        if (!(u.teamIds ?? []).includes(project.providerTeamId)) return false;
       }
       return true;
     });
@@ -106,8 +152,20 @@ export const AssignUserModal: React.FC<AssignUserModalProps> = ({
     onConfirm(selectedUserId);
   };
 
-  const roleStyle = ROLE_COLORS[newRole] ?? { bg: "#F3F2F1", text: "#323130" };
+  const roleLabel = newRole.join(" / ");
+  const roleStyle = ROLE_COLORS[newRole[0]] ?? { bg: "#F3F2F1", text: "#323130" };
   const selectedUser = users.find((u) => u.id === selectedUserId);
+
+  // Agrupar elegibles por rol (para mostrar secciones cuando hay varios roles)
+  const eligibleByRole = useMemo(() => {
+    if (newRole.length <= 1) return null; // lista plana
+    const groups: Array<{ role: AppRole; users: typeof eligible }> = [];
+    for (const role of newRole) {
+      const group = eligible.filter((u) => u.role === role);
+      if (group.length > 0) groups.push({ role, users: group });
+    }
+    return groups.length > 1 ? groups : null; // si quedan <2 grupos con usuarios, lista plana
+  }, [eligible, newRole]);
 
   return (
     <>
@@ -117,7 +175,7 @@ export const AssignUserModal: React.FC<AssignUserModalProps> = ({
         style={{
           position: "fixed", inset: 0,
           background: "rgba(0,0,0,0.40)",
-          zIndex: 39,
+          zIndex: 950,
         }}
       />
 
@@ -134,7 +192,7 @@ export const AssignUserModal: React.FC<AssignUserModalProps> = ({
           background: color.surface,
           borderRadius: radius.lg,
           boxShadow: shadow.xl,
-          zIndex: 40,
+          zIndex: 951,
           fontFamily: "'Segoe UI', sans-serif",
           overflow: "hidden",
         }}
@@ -172,27 +230,34 @@ export const AssignUserModal: React.FC<AssignUserModalProps> = ({
 
         {/* Body */}
         <div style={{ padding: `${spacing[5]}px ${spacing[6]}px` }}>
-          {/* Rol nuevo */}
+          {/* Rol(es) nuevo(s) */}
           <div style={{
             display: "flex", alignItems: "center", gap: spacing[2],
+            flexWrap: "wrap",
             marginBottom: spacing[5],
             padding: `${spacing[3]}px ${spacing[4]}px`,
-            background: roleStyle.bg, borderRadius: radius.sm,
-            border: `1px solid ${roleStyle.text}22`,
+            background: "#F8F8F8", borderRadius: radius.sm,
+            border: `1px solid #EDEBE9`,
           }}>
             <span style={{
               fontSize: font.size.xs, fontWeight: font.weight.semibold,
-              color: roleStyle.text,
+              color: color.textSecondary, whiteSpace: "nowrap",
             }}>
               Nuevo rol asignado:
             </span>
-            <span style={{
-              fontSize: font.size.sm, fontWeight: font.weight.bold,
-              color: roleStyle.text,
-            }}>
-              {newRole}
-            </span>
-            {project && newRole === "Proveedor" && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {newRole.map((r) => {
+                const rs = ROLE_COLORS[r] ?? { bg: "#F3F2F1", text: "#323130" };
+                return (
+                  <span key={r} style={{
+                    fontSize: 10, padding: "2px 8px", borderRadius: 4,
+                    background: rs.bg, color: rs.text,
+                    fontWeight: font.weight.semibold, border: `1px solid ${rs.text}33`,
+                  }}>{r}</span>
+                );
+              })}
+            </div>
+            {project && newRole.includes("Proveedor") && (
               <span style={{ fontSize: font.size.xs, color: color.textMuted, marginLeft: "auto" }}>
                 Proveedor del proyecto
               </span>
@@ -210,8 +275,8 @@ export const AssignUserModal: React.FC<AssignUserModalProps> = ({
               fontSize: font.size.sm, color: color.danger,
             }}>
               <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
-              No hay usuarios disponibles con el rol "{newRole}"
-              {newRole === "Proveedor" && project?.providerId
+              No hay usuarios disponibles con el rol "{roleLabel}"
+              {newRole.includes("Proveedor") && project?.providerId
                 ? ` para el proveedor del proyecto.`
                 : `.`}
             </div>
@@ -227,57 +292,37 @@ export const AssignUserModal: React.FC<AssignUserModalProps> = ({
                 Selecciona un usuario <span style={{ color: color.danger }}>*</span>
               </label>
 
-              {/* Lista de opciones como cards clicables */}
+              {/* Lista agrupada por rol (multi-rol) o plana (un solo rol) */}
               <div style={{
                 display: "flex", flexDirection: "column", gap: spacing[2],
-                maxHeight: 220, overflowY: "auto",
+                maxHeight: 280, overflowY: "auto",
               }}>
-                {eligible.map((u) => {
-                  const isSelected = selectedUserId === u.id;
-                  return (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => { setSelectedUserId(u.id); setError(""); }}
-                      style={{
-                        display: "flex", alignItems: "center", gap: spacing[3],
-                        padding: `${spacing[3]}px ${spacing[4]}px`,
-                        background: isSelected ? color.primaryBg : color.surface,
-                        border: `1.5px solid ${isSelected ? color.primary : color.border}`,
-                        borderRadius: radius.sm,
-                        cursor: "pointer",
-                        textAlign: "left",
-                        transition: "all 140ms",
-                        boxShadow: isSelected ? `0 0 0 2px ${color.primary}33` : "none",
-                      }}
-                    >
-                      <Avatar name={u.displayName} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{
-                          fontSize: font.size.sm, fontWeight: font.weight.medium,
-                          color: isSelected ? color.primary : color.text,
-                        }}>
-                          {u.displayName}
+                {eligibleByRole
+                  ? eligibleByRole.map(({ role, users: groupUsers }) => {
+                      const rs = ROLE_COLORS[role] ?? { bg: "#F3F2F1", text: "#323130" };
+                      return (
+                        <div key={role}>
+                          {/* Separador de grupo */}
+                          <div style={{
+                            display: "flex", alignItems: "center", gap: 8,
+                            marginBottom: 6, marginTop: 4,
+                          }}>
+                            <span style={{
+                              fontSize: 10, padding: "1px 8px", borderRadius: 4,
+                              background: rs.bg, color: rs.text,
+                              fontWeight: 700, border: `1px solid ${rs.text}33`,
+                              flexShrink: 0,
+                            }}>{role}</span>
+                            <div style={{ flex: 1, height: 1, background: "#EDEBE9" }} />
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
+                            {groupUsers.map((u) => <UserCard key={u.id} u={u} isSelected={selectedUserId === u.id} onSelect={(id) => { setSelectedUserId(id); setError(""); }} />)}
+                          </div>
                         </div>
-                        <div style={{ fontSize: font.size.xs, color: color.textMuted }}>
-                          {u.email}
-                        </div>
-                      </div>
-                      {isSelected && (
-                        <div style={{
-                          width: 16, height: 16, borderRadius: "50%",
-                          background: color.primary,
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          flexShrink: 0,
-                        }}>
-                          <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                            <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
+                      );
+                    })
+                  : eligible.map((u) => <UserCard key={u.id} u={u} isSelected={selectedUserId === u.id} onSelect={(id) => { setSelectedUserId(id); setError(""); }} />)
+                }
               </div>
 
               {/* Error */}

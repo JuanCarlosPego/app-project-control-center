@@ -100,8 +100,8 @@ export interface Transition {
   fromStateId: string;
   toStateId: string;
   allowedRoles: AppRole[];
-  /** Rol al que se reasigna la tarea al ejecutar esta transición */
-  assignToRole?: AppRole;
+  /** Roles a los que se puede reasignar la tarea al ejecutar esta transición */
+  assignToRole?: AppRole[];
   /** Auto-asignar team según el nuevo rol (IT→team-it, Proveedor→providerTeamId, Usuario→área) */
   autoAssignTeam?: boolean;
   /** Obligatorio elegir usuario concreto antes de confirmar el movimiento */

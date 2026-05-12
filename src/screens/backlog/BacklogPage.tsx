@@ -20,12 +20,13 @@ import { useAppFilter } from "../../context/AppFilterContext";
 import {
   getWorkItems, getStates, getTransitions, patchWorkItemState,
 } from "../../services/workItemService";
+import { listAppUsers } from "../../services/userService";
 import { useProjectScope } from "../../hooks/useProjectScope";
 import { getProjects } from "../../services/projectService";
 import { apiClient } from "../../services/apiClient";
 import type {
   WorkItem, Project, State, Transition,
-  AppRole,
+  AppRole, AppUser,
 } from "../../types/domain";
 import { ApiError } from "../../services/apiClient";
 
@@ -33,6 +34,7 @@ import { BacklogFilters, EMPTY_BACKLOG_FILTERS, PHASE_STATES, type BacklogFilter
 import { BacklogTable } from "./components/BacklogTable";
 import { BacklogWorkItemDrawer } from "./components/BacklogWorkItemDrawer";
 import { CreateWorkItemModal } from "../projects/components/CreateWorkItemModal";
+import { AssignUserModal } from "../kanban/components/AssignUserModal";
 
 // ── Tokens ────────────────────────────────────────────────
 const PREF_KEY = "pcc:backlog:view";
@@ -168,6 +170,8 @@ export const BacklogPage: React.FC = () => {
   const [createOpen,  setCreateOpen]  = useState(false);
   const [toasts,      setToasts]      = useState<ToastMsg[]>([]);
   const [sendingToKanban, setSendingToKanban] = useState<Set<string>>(new Set());
+  const [users,       setUsers]       = useState<AppUser[]>([]);
+  const [pendingKanban, setPendingKanban] = useState<{ wi: WorkItem; transition: Transition } | null>(null);
 
   // ── Badge de filtro activo (deep-link) ─────────────────
   const deepLinkBadge = useMemo(() => {
@@ -227,9 +231,10 @@ export const BacklogPage: React.FC = () => {
       );
       setWorkItems(wis);
 
-      // Cargar usuarios para mostrar displayName en tabla
+      // Cargar usuarios completos (para AssignUserModal y userMap)
       try {
-        const appUsers = await fetch("/api/app-users").then((r) => r.json()) as Array<{ id: string; displayName: string }>;
+        const appUsers = await listAppUsers();
+        setUsers(appUsers);
         const map: Record<string, string> = {};
         appUsers.forEach((u) => { map[u.id] = u.displayName; });
         setUserMap(map);
@@ -244,19 +249,10 @@ export const BacklogPage: React.FC = () => {
   useEffect(() => { loadData(); }, [loadData]);
 
   // ── "Enviar a Kanban": st-ref → st-prog (o primera transición válida) ──
-  const handleSendToKanban = useCallback(async (wi: WorkItem) => {
-    // Buscar transición desde el estado actual hacia st-prog
-    const transition = transitions.find(
-      (t) => t.fromStateId === wi.stateId &&
-             (t.toStateId === "st-prog" || EXECUTION_STATES.has(t.toStateId)),
-    );
-    if (!transition) {
-      showToast("No hay transición válida para enviar a Kanban desde el estado actual.", false);
-      return;
-    }
+  const executeSendToKanban = useCallback(async (wi: WorkItem, transition: Transition, assignedToUserId?: string) => {
     setSendingToKanban((prev) => new Set([...prev, wi.id]));
     try {
-      const updated = await patchWorkItemState(wi.id, { toStateId: transition.toStateId });
+      const updated = await patchWorkItemState(wi.id, { toStateId: transition.toStateId, assignedToUserId });
       setWorkItems((prev) => prev.map((w) => w.id === wi.id ? { ...w, ...updated } : w));
       if (drawerWI?.id === wi.id) setDrawerWI((d) => d ? { ...d, ...updated } : d);
       showToast(`"${wi.title}" enviada a Kanban ✓`);
@@ -265,7 +261,24 @@ export const BacklogPage: React.FC = () => {
     } finally {
       setSendingToKanban((prev) => { const s = new Set(prev); s.delete(wi.id); return s; });
     }
-  }, [transitions, drawerWI, showToast]);
+  }, [drawerWI, showToast]);
+
+  const handleSendToKanban = useCallback((wi: WorkItem) => {
+    const transition = transitions.find(
+      (t) => t.fromStateId === wi.stateId &&
+             (t.toStateId === "st-prog" || EXECUTION_STATES.has(t.toStateId)),
+    );
+    if (!transition) {
+      showToast("No hay transición válida para enviar a Kanban desde el estado actual.", false);
+      return;
+    }
+    // Si la transición requiere asignación de usuario → mostrar modal
+    if (transition.requireUserAssignment || (transition.assignToRole && transition.assignToRole.length > 0)) {
+      setPendingKanban({ wi, transition });
+      return;
+    }
+    executeSendToKanban(wi, transition);
+  }, [transitions, showToast, executeSendToKanban]);
 
   // ── Filtrado client-side ──────────────────────────────
   const filtered = useMemo(() => {
@@ -538,9 +551,27 @@ export const BacklogPage: React.FC = () => {
         transitions={transitions}
         roles={userRoles}
         appUser={appUser}
+        users={users}
         onClose={() => setDrawerWI(null)}
         onUpdated={handleUpdated}
       />
+
+      {/* ── Modal asignación usuario (Enviar a Kanban) ── */}
+      {pendingKanban && (
+        <AssignUserModal
+          newRole={(pendingKanban.transition.assignToRole ?? [])} 
+          project={projects.find((p) => p.id === pendingKanban.wi.projectId)}
+          users={users}
+          toStateName={states.find((s) => s.id === pendingKanban.transition.toStateId)?.name ?? pendingKanban.transition.toStateId}
+          fromStateName={states.find((s) => s.id === pendingKanban.transition.fromStateId)?.name ?? pendingKanban.transition.fromStateId}
+          onConfirm={(assignedToUserId) => {
+            const { wi, transition } = pendingKanban;
+            setPendingKanban(null);
+            executeSendToKanban(wi, transition, assignedToUserId);
+          }}
+          onCancel={() => setPendingKanban(null)}
+        />
+      )}
 
       {/* ── Modal crear tarea ── */}
       {createOpen && (
