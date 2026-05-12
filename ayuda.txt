@@ -1,0 +1,101 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║           APP PROJECT CONTROL CENTER                                 ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ESTA APP SERÁ LA QUE SUSTITUIRÁ A  SGT-Plan de Sistemas y RoadMap Plus.
+
+CONTENDRÁ LO MEJO R DE Microsoft Project Y DE JIRA
+
+💡 Lo potente de tu idea (bien planteada)
+Si lo haces bien, puedes construir una app con:
+
+1. Visión tipo Microsoft Project (estratégica)
+
+  Roadmap por épicas
+  Fechas inicio/fin
+  Dependencias
+  % avance
+  Gantt (aunque sea simplificado)
+
+2. Ejecución tipo Jira (operativa)
+
+  Tareas / subtareas
+  Máquina de estados (clave en tu caso)
+  Kanban
+  Roles (Proveedor / IT / Negocio)
+  Transiciones controladas (lo que ya estás diseñando)
+
+3. Gobierno (tu diferencial real)
+Esto es lo que no te da ninguna herramienta estándar:
+
+🔐 Control por roles (Dataverse)
+🔄 Quién puede mover estados (muy importante)
+📊 Trazabilidad (quién hizo qué)
+🧭 Separación IT / negocio / proveedor
+📦 Gestión de múltiples proyectos sin mezclar
+
+👉 Esto es donde tu app gana claramente a Jira y Project en tu contexto corporativo.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+HE LANZODO LOS PROMPT EN EL SIGUIENTE ORDEN
+  
+  1. AGENT            → genera app
+  2. 
+  3. 
+  4. 
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  GRUPO DE SEGURIDAD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- xxxxxxxxxxxxxxxxxxxxxxxxx
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ENTORNOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  local  → npm run dev (localhost). Datos simulados, sin Dataverse.
+  dev    → Power Apps entorno DEV. Datos reales, selector de usuario.
+  test   → Power Apps entorno TEST. Sin selector de usuario.
+  prod   → Power Apps entorno PROD. Sin selector de usuario.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  COMANDOS DE DESARROLLO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Arrancar en local (datos simulados):
+    npm run dev
+
+  Publicar nueva versión en Power Apps:
+    npm run build; pac code push
+
+  Probar con Dataverse real antes de publicar:
+    npm run dev                                           (terminal 1)
+    pac code run --local-app-url http://localhost:5173    (terminal 2)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  GIT — FLUJO DE TRABAJO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  git add .
+  git commit -m "feat: descripción del cambio"
+  git push
+
+  Primera vez: Windows pedirá credenciales.
+    Usuario:    JuanCarlosPego
+    Contraseña: tu token ghp_...
+  Quedan guardadas en el Credential Manager para los siguientes pushes.
+
+  Prefijos de commit:
+    feat:      nueva funcionalidad
+    fix:       corrección de bug
+    docs:      cambio en documentación
+    style:     cambios de UI/CSS sin lógica
+    refactor:  reorganización de código
+
