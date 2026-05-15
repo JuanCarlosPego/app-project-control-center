@@ -55,42 +55,46 @@ const App: React.FC = () => (
           <Route index element={<Navigate to="/dashboard" replace />} />
 
           {/* ── PLANIFICACIÓN ── */}
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/projects"  element={<ProjectsPage />} />
-          <Route path="/projects/:id" element={<Stub title="Detalle del proyecto" />} />
-          <Route path="/roadmap"   element={
-            <ProtectedRoute requiredRoles={["Admin", "IT AirEuropa", "Usuario"]}>
-              <RoadmapPage />
-            </ProtectedRoute>
+          <Route path="/dashboard" element={
+            <PermissionRoute permissionKey="VIEW_DASHBOARD"><DashboardPage /></PermissionRoute>
           } />
-          <Route path="/gantt"     element={
-            <ProtectedRoute requiredRoles={["Admin", "IT AirEuropa", "Usuario"]}>
-              <GanttPage />
-            </ProtectedRoute>
+          <Route path="/projects" element={
+            <PermissionRoute permissionKey="VIEW_PROJECTS"><ProjectsPage /></PermissionRoute>
+          } />
+          <Route path="/projects/:id" element={<Stub title="Detalle del proyecto" />} />
+          <Route path="/roadmap" element={
+            <PermissionRoute permissionKey="VIEW_ROADMAP"><RoadmapPage /></PermissionRoute>
+          } />
+          <Route path="/gantt" element={
+            <PermissionRoute permissionKey="VIEW_GANTT"><GanttPage /></PermissionRoute>
           } />
 
           {/* ── EJECUCIÓN ── */}
-          <Route path="/requests"  element={<RequestsPage />} />
-          <Route path="/backlog"   element={<BacklogPage />} />
-          <Route path="/kanban"    element={<KanbanPage />} />
-          <Route path="/activity"  element={<ActivityPage />} />
-          <Route path="/evidences" element={<EvidencesPage />} />
+          <Route path="/requests" element={
+            <PermissionRoute permissionKey="VIEW_REQUESTS"><RequestsPage /></PermissionRoute>
+          } />
+          <Route path="/backlog" element={
+            <PermissionRoute permissionKey="VIEW_BACKLOG"><BacklogPage /></PermissionRoute>
+          } />
+          <Route path="/kanban" element={
+            <PermissionRoute permissionKey="VIEW_KANBAN"><KanbanPage /></PermissionRoute>
+          } />
+          <Route path="/activity" element={
+            <PermissionRoute permissionKey="VIEW_ACTIVITY"><ActivityPage /></PermissionRoute>
+          } />
+          <Route path="/evidences" element={
+            <PermissionRoute permissionKey="VIEW_EVIDENCES"><EvidencesPage /></PermissionRoute>
+          } />
 
           {/* ── GOBIERNO ── */}
           <Route path="/reports" element={
-            <PermissionRoute permissionKey="VIEW_REPORTS">
-              <ReportsPage />
-            </PermissionRoute>
+            <PermissionRoute permissionKey="VIEW_REPORTS"><ReportsPage /></PermissionRoute>
           } />
           <Route path="/risks" element={
-            <ProtectedRoute requiredRoles={["Admin", "IT AirEuropa"]}>
-              <RisksPage />
-            </ProtectedRoute>
+            <PermissionRoute permissionKey="VIEW_RISKS"><RisksPage /></PermissionRoute>
           } />
           <Route path="/audit" element={
-            <ProtectedRoute requiredRoles={["Admin", "IT AirEuropa"]}>
-              <AuditPage />
-            </ProtectedRoute>
+            <PermissionRoute permissionKey="VIEW_AUDIT"><AuditPage /></PermissionRoute>
           } />
 
           {/* ── ADMINISTRACIÓN: Admin only ── */}

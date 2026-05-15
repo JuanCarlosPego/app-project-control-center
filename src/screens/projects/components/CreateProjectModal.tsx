@@ -8,10 +8,11 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
-import type { BusinessArea, Provider, Team, AppUser, AppRole } from "../../../types/domain";
+import type { BusinessArea, Provider, Team, AppUser, AppRole, VisibilityMode } from "../../../types/domain";
 import { listTeams } from "../../../services/teamService";
 import { listAppUsers } from "../../../services/userService";
 import { filterTeamsForRole, filterUsersForAssignment } from "../../../services/assignmentService";
+import { ProjectVisibilitySelector } from "./ProjectVisibilitySelector";
 
 // ── Payload ───────────────────────────────────────────────
 export interface CreateProjectPayload {
@@ -20,6 +21,7 @@ export interface CreateProjectPayload {
   businessAreaId: string;
   deliveryOwnerType: "IT" | "Proveedor";
   providerId: string;
+  providerTeamId: string;
   status: "Pendiente" | "En curso" | "Bloqueado" | "Cerrado";
   category: string;
   priority: "Alta" | "Media" | "Baja";
@@ -29,6 +31,9 @@ export interface CreateProjectPayload {
   assignedToRole: AppRole | "";
   assignedToTeamId: string;
   assignedToUserId: string;
+  // Visibilidad
+  visibilityMode: VisibilityMode;
+  visibilityTeamIds: string[];
 }
 
 // Roles elegibles como responsable (no Invitado, no Admin como responsable de tarea)
@@ -111,6 +116,7 @@ const EMPTY_FORM: CreateProjectPayload = {
   businessAreaId:    "",
   deliveryOwnerType: "IT",
   providerId:        "",
+  providerTeamId:    "",
   status:            "Pendiente",
   category:          "",
   priority:          "Media",
@@ -119,6 +125,8 @@ const EMPTY_FORM: CreateProjectPayload = {
   assignedToRole:    "",
   assignedToTeamId:  "",
   assignedToUserId:  "",
+  visibilityMode:    "Enterprise",
+  visibilityTeamIds: [],
 };
 
 // ── CreateProjectModal ────────────────────────────────────
@@ -136,7 +144,7 @@ export const CreateProjectModal: React.FC<Props> = ({
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
   const [loadingRef, setLoadingRef] = useState(false);
 
-  // Equipos disponibles según el rol seleccionado
+  // Equipos disponibles según el rol seleccionado (para la sección responsable)
   const availableTeams = useMemo(() =>
     form.assignedToRole ? filterTeamsForRole(allTeams, form.assignedToRole as AppRole) : [],
   [allTeams, form.assignedToRole]);
@@ -161,6 +169,21 @@ export const CreateProjectModal: React.FC<Props> = ({
     }).catch(() => { /* silencioso — no bloquea el formulario */ })
       .finally(() => setLoadingRef(false));
   }, [open]);
+
+  // Smart preselection de visibilityTeamIds cuando cambia deliveryOwnerType o providerTeamId
+  useEffect(() => {
+    if (!open) return;
+    let suggested: string[];
+    if (form.deliveryOwnerType === "Proveedor") {
+      // Proyectos de proveedor → team-it + equipo proveedor seleccionado
+      suggested = ["team-it", ...(form.providerTeamId ? [form.providerTeamId] : [])];
+    } else {
+      // Proyectos IT → sólo team-it
+      suggested = ["team-it"];
+    }
+    setForm((f) => ({ ...f, visibilityTeamIds: suggested }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, form.deliveryOwnerType, form.providerTeamId]);
 
   // Reset al abrir
   useEffect(() => {
@@ -190,6 +213,9 @@ export const CreateProjectModal: React.FC<Props> = ({
     if (!form.endDate)             errs.endDate   = "La fecha de fin es obligatoria";
     if (form.startDate && form.endDate && form.startDate > form.endDate)
       errs.endDate = "La fecha de fin no puede ser anterior a la de inicio";
+    // Visibilidad restringida sin equipos
+    if (form.visibilityMode === "Restricted" && form.visibilityTeamIds.length === 0)
+      (errs as Record<string, string>).visibilityTeamIds = "Selecciona al menos un equipo";
     // Validación de responsable: Proveedor obliga equipo + usuario
     if (form.assignedToRole === "Proveedor") {
       if (!form.assignedToTeamId) errs.assignedToTeamId = "El equipo es obligatorio para rol Proveedor";
@@ -362,17 +388,32 @@ export const CreateProjectModal: React.FC<Props> = ({
 
             {/* Proveedor (solo si deliveryOwnerType=Proveedor) */}
             {form.deliveryOwnerType === "Proveedor" && (
-              <Field label="Proveedor">
-                <Sel
-                  value={form.providerId}
-                  onChange={(e) => setForm((f) => ({ ...f, providerId: e.target.value }))}
-                >
-                  <option value="">— Sin proveedor —</option>
-                  {providers.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </Sel>
-              </Field>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <Field label="Empresa proveedora">
+                  <Sel
+                    value={form.providerId}
+                    onChange={(e) => setForm((f) => ({ ...f, providerId: e.target.value }))}
+                  >
+                    <option value="">— Sin proveedor —</option>
+                    {providers.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </Sel>
+                </Field>
+                <Field label="Equipo proveedor">
+                  <Sel
+                    value={form.providerTeamId}
+                    onChange={(e) => setForm((f) => ({ ...f, providerTeamId: e.target.value }))}
+                  >
+                    <option value="">— Sin equipo —</option>
+                    {allTeams
+                      .filter((t) => t.type === "Provider" && t.isActive)
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                  </Sel>
+                </Field>
+              </div>
             )}
 
             {/* Estado + Prioridad */}
@@ -513,6 +554,17 @@ export const CreateProjectModal: React.FC<Props> = ({
                 {!form.assignedToRole && "El responsable puede asignarse más tarde."}
               </div>
             </div>
+
+            {/* Visibilidad */}
+            <ProjectVisibilitySelector
+              mode={form.visibilityMode}
+              teamIds={form.visibilityTeamIds}
+              availableTeams={allTeams.filter((t) => t.isActive)}
+              onChange={(mode, teamIds) =>
+                setForm((f) => ({ ...f, visibilityMode: mode, visibilityTeamIds: teamIds }))
+              }
+              error={(errors as Record<string, string>).visibilityTeamIds}
+            />
 
             {/* Fechas */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>

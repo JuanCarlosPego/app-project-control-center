@@ -45,6 +45,12 @@ export const getProjects = (filters: ProjectFilters = {}): Promise<Project[]> =>
 export const getProjectById = (id: string): Promise<Project> =>
   apiClient.get(`/projects/${id}`);
 
+export const createProject = (data: Partial<Project>): Promise<Project> =>
+  apiClient.post(`/projects`, data);
+
+export const patchProject = (id: string, data: Partial<Project>): Promise<Project> =>
+  apiClient.patch(`/projects/${id}`, data);
+
 // ── WorkItems ────────────────────────────────────────────
 export const getProjectWorkItems = (projectId: string): Promise<WorkItem[]> =>
   apiClient.get(`/projects/${projectId}/workitems`);

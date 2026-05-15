@@ -14,6 +14,7 @@ export interface NavItem {
   icon: React.ReactNode;
   requiredRoles: AppRole[];   // [] = visible to ALL roles
   optional?: boolean;         // won't break MVP if not implemented
+  permissionKey?: string;     // RBAC VIEW_ key — si se define, oculta el item si el permiso es false
   children?: NavItem[];
 }
 
@@ -31,10 +32,10 @@ const NAV_PLANIFICACION: NavGroup = {
   id: "planning",
   groupLabel: "Planificación",
   items: [
-    { id: "dashboard", label: "Inicio",    route: "/dashboard", icon: ic(LayoutDashboard), requiredRoles: [] },
-    { id: "projects",  label: "Proyectos", route: "/projects",  icon: ic(FolderOpen),      requiredRoles: [] },
-    { id: "roadmap",   label: "Roadmap",   route: "/roadmap",   icon: ic(Map),             requiredRoles: ["Admin", "IT AirEuropa", "Usuario"], optional: true },
-    { id: "gantt",     label: "Gantt",     route: "/gantt",     icon: ic(CalendarRange),   requiredRoles: ["Admin", "IT AirEuropa", "Usuario"] },
+    { id: "dashboard", label: "Inicio",    route: "/dashboard", icon: ic(LayoutDashboard), requiredRoles: [], permissionKey: "VIEW_DASHBOARD" },
+    { id: "projects",  label: "Proyectos", route: "/projects",  icon: ic(FolderOpen),      requiredRoles: [], permissionKey: "VIEW_PROJECTS" },
+    { id: "roadmap",   label: "Roadmap",   route: "/roadmap",   icon: ic(Map),             requiredRoles: [], permissionKey: "VIEW_ROADMAP",   optional: true },
+    { id: "gantt",     label: "Gantt",     route: "/gantt",     icon: ic(CalendarRange),   requiredRoles: [], permissionKey: "VIEW_GANTT" },
   ],
 };
 
@@ -44,11 +45,11 @@ const NAV_EJECUCION: NavGroup = {
   id: "execution",
   groupLabel: "Ejecución",
   items: [
-    { id: "requests", label: "Solicitudes", route: "/requests", icon: ic(Inbox),      requiredRoles: [] },
-    { id: "backlog",  label: "Backlog",     route: "/backlog",  icon: ic(ListTodo),   requiredRoles: [] },
-    { id: "kanban",   label: "Kanban",      route: "/kanban",   icon: ic(LayoutGrid), requiredRoles: [] },
-    { id: "activity", label: "Actividad",   route: "/activity", icon: ic(Clock),      requiredRoles: [] },
-    { id: "evidences", label: "Evidencias", route: "/evidences", icon: ic(FileCheck2), requiredRoles: [] },
+    { id: "requests",  label: "Solicitudes", route: "/requests",  icon: ic(Inbox),      requiredRoles: [], permissionKey: "VIEW_REQUESTS" },
+    { id: "backlog",   label: "Backlog",     route: "/backlog",   icon: ic(ListTodo),   requiredRoles: [], permissionKey: "VIEW_BACKLOG" },
+    { id: "kanban",    label: "Kanban",      route: "/kanban",    icon: ic(LayoutGrid), requiredRoles: [], permissionKey: "VIEW_KANBAN" },
+    { id: "activity",  label: "Actividad",   route: "/activity",  icon: ic(Clock),      requiredRoles: [], permissionKey: "VIEW_ACTIVITY" },
+    { id: "evidences", label: "Evidencias",  route: "/evidences", icon: ic(FileCheck2), requiredRoles: [], permissionKey: "VIEW_EVIDENCES" },
   ],
 };
 
@@ -58,9 +59,9 @@ const NAV_GOBIERNO: NavGroup = {
   id: "governance",
   groupLabel: "Gobierno",
   items: [
-    { id: "reports", label: "Informes / KPIs",    route: "/reports", icon: ic(BarChart2),     requiredRoles: ["Admin", "IT AirEuropa"] },
-    { id: "risks",   label: "Riesgos y Bloqueos", route: "/risks",   icon: ic(AlertTriangle), requiredRoles: ["Admin", "IT AirEuropa"], optional: true },
-    { id: "audit",   label: "Auditoría",           route: "/audit",   icon: ic(ShieldCheck),   requiredRoles: ["Admin", "IT AirEuropa"], optional: true },
+    { id: "reports", label: "Informes / KPIs",    route: "/reports", icon: ic(BarChart2),     requiredRoles: [], permissionKey: "VIEW_REPORTS" },
+    { id: "risks",   label: "Riesgos y Bloqueos", route: "/risks",   icon: ic(AlertTriangle), requiredRoles: [], permissionKey: "VIEW_RISKS",   optional: true },
+    { id: "audit",   label: "Auditoría",           route: "/audit",   icon: ic(ShieldCheck),   requiredRoles: [], permissionKey: "VIEW_AUDIT",   optional: true },
   ],
 };
 

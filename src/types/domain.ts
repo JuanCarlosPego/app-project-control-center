@@ -116,6 +116,8 @@ export interface Transition {
 }
 
 // ── Entidades principales ────────────────────────────────
+export type VisibilityMode = "Enterprise" | "Restricted";
+
 export interface Project {
   id: string;
   code: string;
@@ -144,6 +146,15 @@ export interface Project {
   assignedToTeamId?: string | null;
   /** Usuario responsable concreto — debe pertenecer a assignedToTeamId si está informado */
   assignedToUserId?: string | null;
+  /**
+   * Modo de visibilidad:
+   *   "Enterprise" → cualquier usuario autenticado puede ver el proyecto
+   *   "Restricted"  → solo usuarios cuyos teamIds intersecten con visibilityTeamIds
+   * Admin siempre ve todos (bypass).
+   */
+  visibilityMode?: VisibilityMode;
+  /** Equipos que pueden ver el proyecto cuando visibilityMode = "Restricted" */
+  visibilityTeamIds?: string[];
 }
 
 export interface WorkItem {

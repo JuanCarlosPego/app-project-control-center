@@ -11,6 +11,7 @@ import {
   getRolePermissions, patchRolePermission, resetRolePermissions,
   type RolePermissionsPayload,
 } from "../../services/adminService";
+import { invalidatePermissionCache } from "../../auth/usePermission";
 import type { RbacPermission, RolePermissionsMap } from "../../types/domain";
 import {
   Toggle, InfoBanner, AdminToastContainer, PageHeader,
@@ -153,6 +154,7 @@ export const AdminPermissionsPage: React.FC = () => {
     try {
       const updated = await patchRolePermission(role, key, next);
       setRolePermissions(updated as RolePermissionsMap);
+      invalidatePermissionCache();
       addToast(`'${role}' · ${key} → ${next ? "ON" : "OFF"}`);
     } catch (e: unknown) {
       // rollback
@@ -172,6 +174,7 @@ export const AdminPermissionsPage: React.FC = () => {
     try {
       const updated = await resetRolePermissions();
       setRolePermissions(updated as RolePermissionsMap);
+      invalidatePermissionCache();
       addToast("Permisos restaurados a los valores por defecto.");
     } catch {
       addToast("Error al restaurar permisos.", false);

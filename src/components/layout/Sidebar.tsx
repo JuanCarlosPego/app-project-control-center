@@ -5,12 +5,8 @@ import { NAV_GROUPS, NAV_ADMIN_ITEM, type NavItem } from "../../navigation/menuC
 import { useAuth } from "../../auth/AuthContext";
 import { useEffectiveUser } from "../../auth/ImpersonationContext";
 import { hasRole } from "../../auth/permissions";
+import { useRolePermissions } from "../../auth/usePermission";
 import { TestUserSwitcher } from "./TestUserSwitcher";
-
-// ── Visibilidad del switcher ───────────────────────────────────────
-// En local (VITE_USE_MOCKS=true): siempre visible.
-// En producción: solo si el usuario real tiene role === "Admin".
-const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === "true";
 
 // ── Design tokens ──────────────────────────────────────────────────────────
 const T = {
@@ -36,6 +32,7 @@ export const Sidebar: React.FC = () => {
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(["admin"]));
   const { user: realUser, appUser: realAppUser } = useAuth();
   const { user: effectiveUserObj, roles } = useEffectiveUser();
+  const { permissions: rbacPerms } = useRolePermissions();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -106,9 +103,12 @@ export const Sidebar: React.FC = () => {
       <nav style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "6px 0" }}>
         {NAV_GROUPS.map(group => {
           // Filter items the user can see
-          const visibleItems = group.items.filter(item =>
-            hasRole(roles, item.requiredRoles)
-          );
+          const visibleItems = group.items.filter(item => {
+            if (!hasRole(roles, item.requiredRoles)) return false;
+            // Si tiene permissionKey definido y el permiso es false, ocultar
+            if (item.permissionKey && rbacPerms[item.permissionKey] === false) return false;
+            return true;
+          });
           if (visibleItems.length === 0) return null;
 
           // Admin group has special accordion behavior
@@ -192,7 +192,7 @@ export const Sidebar: React.FC = () => {
 const AppLogo: React.FC = () => (
   <div style={{ width: 28, height: 28, minWidth: 28, borderRadius: 6, background: T.accent,
                 display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-    <span style={{ color: "#fff", fontSize: 13, fontWeight: 800, letterSpacing: -1 }}>PC</span>
+    <span style={{ color: "#fff", fontSize: 13, fontWeight: 800, letterSpacing: -1 }}>AEA</span>
   </div>
 );
 

@@ -43,38 +43,30 @@ const err = (status: number, message: string) =>
 function visibleProjects(): Project[] {
   const user = store.currentUser as AppUser;
   const role = (user.role ?? (user as unknown as { roles: string[] }).roles?.[0]) as AppRole;
+  const userTeamIds = new Set(user.teamIds ?? []);
 
-  if (role === "Admin" || role === "IT AirEuropa") {
+  // Admin → ve absolutamente todo (bypass total)
+  if (role === "Admin") {
     return store.projects as Project[];
   }
 
-  if (role === "Proveedor") {
-    // Proveedor ve solo proyectos de sus equipos provider
-    const providerTeamIds = new Set(
-      (user.teamIds ?? []).filter((tid) => {
-        const team = store.teams.find((t) => t.id === tid);
-        return team?.type === "Provider";
-      }),
-    );
-    return (store.projects as Project[]).filter(
-      (p) => p.deliveryOwnerType === "Proveedor" &&
-             providerTeamIds.has(p.providerTeamId ?? ""),
-    );
-  }
+  // Filtro base por visibilityMode:
+  //   "Enterprise"  → visible para todos los roles autenticados
+  //   "Restricted"  → solo si el usuario pertenece a alguno de los visibilityTeamIds
+  //   Sin campo     → trata como "Restricted" usando proveedor/area como fallback
+  const canSeeByVisibility = (p: Project): boolean => {
+    const mode = p.visibilityMode ?? "Restricted";
+    if (mode === "Enterprise") return true;
+    // Restricted: intersección entre teamIds del usuario y visibilityTeamIds del proyecto
+    const visTeams = p.visibilityTeamIds ?? [];
+    if (visTeams.length === 0) {
+      // Sin equipos configurados → sólo IT y Admin (ya filtrados antes)
+      return role === "IT AirEuropa";
+    }
+    return visTeams.some((tid) => userTeamIds.has(tid));
+  };
 
-  // Usuario/Invitado: proyectos donde es miembro + proyectos del área (via teamIds)
-  const memberProjectIds = new Set(
-    store.projectMembers
-      .filter((m) => m.userId === user.id)
-      .map((m) => m.projectId),
-  );
-  // team-X → ba-X (convención de naming)
-  const areaIds = new Set(
-    (user.teamIds ?? []).map((tid) => tid.replace("team-", "ba-")),
-  );
-  return (store.projects as Project[]).filter(
-    (p) => memberProjectIds.has(p.id) || areaIds.has(p.businessAreaId),
-  );
+  return (store.projects as Project[]).filter(canSeeByVisibility);
 }
 
 /** Valida la transición y devuelve el objeto transition o null si inválida */
@@ -1518,6 +1510,7 @@ export const handlers = [
       businessAreaId:    body.businessAreaId ?? "",
       deliveryOwnerType: (body.deliveryOwnerType as Project["deliveryOwnerType"]) ?? "IT",
       providerId:        body.providerId ?? "",
+      providerTeamId:    body.providerTeamId ?? null,
       status:            (body.status as Project["status"]) ?? "Pendiente",
       category:          body.category ?? "",
       priority:          (body.priority as Project["priority"]) ?? "Media",
@@ -1525,6 +1518,9 @@ export const handlers = [
       endDate:           body.endDate,
       progress:          0,
       requestedByUserId: store.currentUser.id,
+      // Visibilidad
+      visibilityMode:    body.visibilityMode ?? "Enterprise",
+      visibilityTeamIds: body.visibilityTeamIds ?? [],
       // Asignación de responsable
       ...(body.assignedToRole    ? { assignedToRole:   body.assignedToRole   as AppRole } : {}),
       ...(body.assignedToTeamId  ? { assignedToTeamId: body.assignedToTeamId as string  } : {}),
@@ -1548,6 +1544,42 @@ export const handlers = [
     (store.activityLog as ActivityLogEntry[]).push(logEntry);
 
     return HttpResponse.json(newProject, { status: 201 });
+  }),
+
+  // ── PATCH /api/projects/:id ───────────────────────────
+  http.patch("/api/projects/:id", async ({ params, request }) => {
+    if (!currentUserHasRole(["Admin", "IT AirEuropa"])) {
+      return err(403, "Sin permisos para editar proyectos");
+    }
+    const idx = (store.projects as Project[]).findIndex((p) => p.id === params.id);
+    if (idx === -1) return err(404, "Proyecto no encontrado");
+
+    const body = await request.json() as Partial<Project>;
+
+    // Validar fechas si se envían
+    const startDate = body.startDate ?? (store.projects as Project[])[idx].startDate;
+    const endDate   = body.endDate   ?? (store.projects as Project[])[idx].endDate;
+    if (startDate > endDate) return err(400, "startDate no puede ser posterior a endDate");
+
+    // Validar visibilityMode si se envía
+    if (body.visibilityMode && !["Enterprise", "Restricted"].includes(body.visibilityMode)) {
+      return err(400, "visibilityMode debe ser 'Enterprise' o 'Restricted'");
+    }
+
+    const before = { ...(store.projects as Project[])[idx] };
+    Object.assign((store.projects as Project[])[idx], body);
+    const updated = (store.projects as Project[])[idx];
+
+    const cu = store.currentUser as AppUser;
+    (store.auditLog as unknown[]).push({
+      id: genId("audit"), category: "Project", action: "PROJECT_UPDATED",
+      who: cu.id, whoRole: cu.role ?? (cu as unknown as { roles: string[] }).roles?.[0],
+      at: new Date().toISOString(), entityType: "Project", entityId: updated.id,
+      before, after: updated,
+      description: `Proyecto '${updated.name}' actualizado`,
+    });
+
+    return ok({ ...updated, progress: computeProjectProgress(updated.id) });
   }),
 
   // ── GET /api/me ──────────────────────────────────────
@@ -1655,11 +1687,11 @@ export const handlers = [
     if (!currentUserHasRole(["Admin"])) return err(403, "Solo el Administrador puede acceder");
 
     const RBAC_DEFAULTS: Record<string, Record<string, boolean>> = {
-      "Admin":        { TASK_CREATE: true,  TASK_EDIT: true,  TASK_CLOSE: true,  TASK_REOPEN: true,  TASK_VIEW_ALL: true,  TRANS_NEW_PROG: true,  TRANS_PROG_RFT: true,  TRANS_RFT_TEST: true,  TRANS_TEST_CLS: true,  TRANS_BLOCK: true,  TRANS_UNBLOCK: true,  VIEW_KANBAN: true,  VIEW_BACKLOG: true,  VIEW_DASHBOARD: true,  VIEW_REPORTS: true,  VIEW_HOME_SMART: true  },
-      "IT AirEuropa": { TASK_CREATE: true,  TASK_EDIT: true,  TASK_CLOSE: true,  TASK_REOPEN: true,  TASK_VIEW_ALL: true,  TRANS_NEW_PROG: true,  TRANS_PROG_RFT: true,  TRANS_RFT_TEST: true,  TRANS_TEST_CLS: true,  TRANS_BLOCK: true,  TRANS_UNBLOCK: true,  VIEW_KANBAN: true,  VIEW_BACKLOG: true,  VIEW_DASHBOARD: true,  VIEW_REPORTS: true,  VIEW_HOME_SMART: true  },
-      "Proveedor":    { TASK_CREATE: false, TASK_EDIT: true,  TASK_CLOSE: false, TASK_REOPEN: false, TASK_VIEW_ALL: true,  TRANS_NEW_PROG: true,  TRANS_PROG_RFT: true,  TRANS_RFT_TEST: false, TRANS_TEST_CLS: false, TRANS_BLOCK: true,  TRANS_UNBLOCK: true,  VIEW_KANBAN: true,  VIEW_BACKLOG: true,  VIEW_DASHBOARD: true,  VIEW_REPORTS: false, VIEW_HOME_SMART: true  },
-      "Usuario":      { TASK_CREATE: false, TASK_EDIT: false, TASK_CLOSE: false, TASK_REOPEN: false, TASK_VIEW_ALL: true,  TRANS_NEW_PROG: false, TRANS_PROG_RFT: false, TRANS_RFT_TEST: false, TRANS_TEST_CLS: false, TRANS_BLOCK: false, TRANS_UNBLOCK: false, VIEW_KANBAN: true,  VIEW_BACKLOG: true,  VIEW_DASHBOARD: true,  VIEW_REPORTS: true,  VIEW_HOME_SMART: true  },
-      "Invitado":     { TASK_CREATE: false, TASK_EDIT: false, TASK_CLOSE: false, TASK_REOPEN: false, TASK_VIEW_ALL: false, TRANS_NEW_PROG: false, TRANS_PROG_RFT: false, TRANS_RFT_TEST: false, TRANS_TEST_CLS: false, TRANS_BLOCK: false, TRANS_UNBLOCK: false, VIEW_KANBAN: true,  VIEW_BACKLOG: true,  VIEW_DASHBOARD: true,  VIEW_REPORTS: false, VIEW_HOME_SMART: false },
+      "Admin":        { TASK_CREATE: true,  TASK_EDIT: true,  TASK_CLOSE: true,  TASK_REOPEN: true,  TASK_VIEW_ALL: true,  TRANS_NEW_PROG: true,  TRANS_PROG_RFT: true,  TRANS_RFT_TEST: true,  TRANS_TEST_CLS: true,  TRANS_BLOCK: true,  TRANS_UNBLOCK: true,  VIEW_DASHBOARD: true,  VIEW_PROJECTS: true,  VIEW_ROADMAP: true,  VIEW_GANTT: true,  VIEW_REQUESTS: true,  VIEW_BACKLOG: true,  VIEW_KANBAN: true,  VIEW_ACTIVITY: true,  VIEW_EVIDENCES: true,  VIEW_REPORTS: true,  VIEW_RISKS: true,  VIEW_AUDIT: true,  VIEW_HOME_SMART: true  },
+      "IT AirEuropa": { TASK_CREATE: true,  TASK_EDIT: true,  TASK_CLOSE: true,  TASK_REOPEN: true,  TASK_VIEW_ALL: true,  TRANS_NEW_PROG: true,  TRANS_PROG_RFT: true,  TRANS_RFT_TEST: true,  TRANS_TEST_CLS: true,  TRANS_BLOCK: true,  TRANS_UNBLOCK: true,  VIEW_DASHBOARD: true,  VIEW_PROJECTS: true,  VIEW_ROADMAP: true,  VIEW_GANTT: true,  VIEW_REQUESTS: true,  VIEW_BACKLOG: true,  VIEW_KANBAN: true,  VIEW_ACTIVITY: true,  VIEW_EVIDENCES: true,  VIEW_REPORTS: true,  VIEW_RISKS: true,  VIEW_AUDIT: true,  VIEW_HOME_SMART: true  },
+      "Proveedor":    { TASK_CREATE: false, TASK_EDIT: true,  TASK_CLOSE: false, TASK_REOPEN: false, TASK_VIEW_ALL: true,  TRANS_NEW_PROG: true,  TRANS_PROG_RFT: true,  TRANS_RFT_TEST: false, TRANS_TEST_CLS: false, TRANS_BLOCK: true,  TRANS_UNBLOCK: true,  VIEW_DASHBOARD: true,  VIEW_PROJECTS: true,  VIEW_ROADMAP: false, VIEW_GANTT: false, VIEW_REQUESTS: true,  VIEW_BACKLOG: true,  VIEW_KANBAN: true,  VIEW_ACTIVITY: true,  VIEW_EVIDENCES: true,  VIEW_REPORTS: false, VIEW_RISKS: false, VIEW_AUDIT: false, VIEW_HOME_SMART: true  },
+      "Usuario":      { TASK_CREATE: false, TASK_EDIT: false, TASK_CLOSE: false, TASK_REOPEN: false, TASK_VIEW_ALL: true,  TRANS_NEW_PROG: false, TRANS_PROG_RFT: false, TRANS_RFT_TEST: false, TRANS_TEST_CLS: false, TRANS_BLOCK: false, TRANS_UNBLOCK: false, VIEW_DASHBOARD: true,  VIEW_PROJECTS: true,  VIEW_ROADMAP: true,  VIEW_GANTT: true,  VIEW_REQUESTS: true,  VIEW_BACKLOG: true,  VIEW_KANBAN: true,  VIEW_ACTIVITY: true,  VIEW_EVIDENCES: true,  VIEW_REPORTS: true,  VIEW_RISKS: false, VIEW_AUDIT: false, VIEW_HOME_SMART: true  },
+      "Invitado":     { TASK_CREATE: false, TASK_EDIT: false, TASK_CLOSE: false, TASK_REOPEN: false, TASK_VIEW_ALL: false, TRANS_NEW_PROG: false, TRANS_PROG_RFT: false, TRANS_RFT_TEST: false, TRANS_TEST_CLS: false, TRANS_BLOCK: false, TRANS_UNBLOCK: false, VIEW_DASHBOARD: true,  VIEW_PROJECTS: true,  VIEW_ROADMAP: false, VIEW_GANTT: false, VIEW_REQUESTS: false, VIEW_BACKLOG: true,  VIEW_KANBAN: true,  VIEW_ACTIVITY: false, VIEW_EVIDENCES: false, VIEW_REPORTS: false, VIEW_RISKS: false, VIEW_AUDIT: false, VIEW_HOME_SMART: false },
     };
 
     const before = structuredClone(store.rolePermissions);

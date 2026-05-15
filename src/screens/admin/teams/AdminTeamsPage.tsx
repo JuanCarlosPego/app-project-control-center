@@ -16,15 +16,16 @@ import { useNavigate } from "react-router-dom";
 import {
   Users, Plus, Search, X, Pencil, CheckCircle, XCircle,
   RotateCw, Eye, Building2, Network, Cpu, ArrowRight,
-  Save, ChevronDown, UserCheck, UserX,
+  Save, ChevronDown, UserCheck, UserX, FolderOpen, Globe, Lock,
 } from "lucide-react";
-import type { Team, TeamType, AppUser } from "../../../types/domain";
+import type { Team, TeamType, AppUser, Project, ProjectStatus } from "../../../types/domain";
 import {
   listTeams, createTeam, updateTeam,
   activateTeam, deactivateTeam,
   type CreateTeamPayload, type UpdateTeamPayload,
 } from "../../../services/teamService";
 import { listAppUsers } from "../../../services/userService";
+import { getProjects } from "../../../services/projectService";
 import {
   AdminToastContainer, newAdminToast, type ToastMsg,
 } from "../components/shared";
@@ -389,10 +390,19 @@ const TeamFormDrawer: React.FC<TeamFormDrawerProps> = ({
 // ═══════════════════════════════════════════════════════════
 //  TeamDetailDrawer — Ver miembros + CTA Gestionar
 // ═══════════════════════════════════════════════════════════
+// ── Status chip para proyectos ────────────────────────────
+const STATUS_CFG: Record<ProjectStatus, { bg: string; color: string; border: string }> = {
+  "Pendiente": { bg: "#F8F7F6",  color: "#605E5C", border: "#EDEBE9" },
+  "En curso":  { bg: "#EFF6FC",  color: "#0078D4", border: "#C7E0F4" },
+  "Bloqueado": { bg: "#FFF4CE",  color: "#835B00", border: "#F2D98B" },
+  "Cerrado":   { bg: "#F3FBF5",  color: "#107C10", border: "#B7E0B8" },
+};
+
 interface TeamDetailDrawerProps {
   team: Team | null;
   members: AppUser[];
   loadingMembers: boolean;
+  teamProjects: Project[];
   onClose: () => void;
   onNavigateUsers: (teamId: string) => void;
   onEdit: (team: Team) => void;
@@ -407,8 +417,13 @@ const ROLE_CHIP: Record<string, { bg: string; color: string; border: string }> =
 };
 
 const TeamDetailDrawer: React.FC<TeamDetailDrawerProps> = ({
-  team, members, loadingMembers, onClose, onNavigateUsers, onEdit,
+  team, members, loadingMembers, teamProjects, onClose, onNavigateUsers, onEdit,
 }) => {
+  const [activeTab, setActiveTab] = useState<"members" | "projects">("members");
+
+  // Resetear pestaña activa al cambiar de equipo
+  useEffect(() => { setActiveTab("members"); }, [team?.id]);
+
   if (!team) return null;
 
   const cfg = TEAM_TYPE_CFG[team.type];
@@ -477,7 +492,7 @@ const TeamDetailDrawer: React.FC<TeamDetailDrawerProps> = ({
           </div>
         </div>
 
-        {/* Resumen */}
+        {/* Resumen estadístico */}
         <div style={{
           padding: "14px 24px", borderBottom: "1px solid #EDEBE9",
           display: "flex", gap: 24, flexShrink: 0,
@@ -486,7 +501,7 @@ const TeamDetailDrawer: React.FC<TeamDetailDrawerProps> = ({
             <div style={{ fontSize: 22, fontWeight: 800, color: "#201F1E", fontFamily: F }}>
               {members.length}
             </div>
-            <div style={{ fontSize: 11, color: "#605E5C", fontFamily: F }}>Miembros totales</div>
+            <div style={{ fontSize: 11, color: "#605E5C", fontFamily: F }}>Miembros</div>
           </div>
           <div style={{ width: 1, background: "#EDEBE9" }} />
           <div style={{ textAlign: "center" }}>
@@ -502,79 +517,226 @@ const TeamDetailDrawer: React.FC<TeamDetailDrawerProps> = ({
             </div>
             <div style={{ fontSize: 11, color: "#605E5C", fontFamily: F }}>Inactivos</div>
           </div>
+          <div style={{ width: 1, background: "#EDEBE9" }} />
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "#7530AF", fontFamily: F }}>
+              {teamProjects.length}
+            </div>
+            <div style={{ fontSize: 11, color: "#605E5C", fontFamily: F }}>Proyectos</div>
+          </div>
         </div>
 
-        {/* Lista miembros */}
+        {/* Pestañas */}
+        <div style={{
+          display: "flex", borderBottom: "1px solid #EDEBE9",
+          flexShrink: 0, padding: "0 24px",
+        }}>
+          {([
+            { key: "members",  label: "Miembros",              Icon: Users,      count: members.length },
+            { key: "projects", label: "Proyectos con acceso",  Icon: FolderOpen, count: teamProjects.length },
+          ] as const).map(({ key, label, Icon: TabIcon, count }) => {
+            const isActive = activeTab === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                style={{
+                  padding: "10px 4px", marginRight: 20,
+                  background: "none", border: "none", cursor: "pointer",
+                  borderBottom: `2px solid ${isActive ? "#0078D4" : "transparent"}`,
+                  color: isActive ? "#0078D4" : "#605E5C",
+                  fontSize: 13, fontFamily: F, fontWeight: isActive ? 700 : 400,
+                  display: "flex", alignItems: "center", gap: 6,
+                  transition: "color 150ms",
+                }}
+              >
+                <TabIcon size={14} />
+                {label}
+                <span style={{
+                  background: isActive ? "#EFF6FC" : "#F3F2F1",
+                  color: isActive ? "#0078D4" : "#A19F9D",
+                  borderRadius: 10, fontSize: 11, fontWeight: 700,
+                  padding: "1px 7px",
+                }}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Contenido de la pestaña */}
         <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
-          {loadingMembers ? (
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "center",
-              gap: 8, padding: 32, color: "#605E5C", fontFamily: F, fontSize: 13,
-            }}>
-              <RotateCw size={16} style={{ animation: "spin 1s linear infinite" }} />
-              Cargando miembros…
-            </div>
-          ) : members.length === 0 ? (
-            <div style={{
-              display: "flex", flexDirection: "column", alignItems: "center",
-              padding: "32px 16px", gap: 8, color: "#A19F9D",
-            }}>
-              <Users size={32} strokeWidth={1.5} color="#EDEBE9" />
-              <div style={{ fontSize: 13, fontFamily: F }}>Este equipo no tiene miembros aún</div>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {members.map((m) => {
-                const rc = ROLE_CHIP[m.role] ?? ROLE_CHIP["Invitado"];
-                return (
-                  <div
-                    key={m.id}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 12,
-                      padding: "10px 14px", borderRadius: 8,
-                      border: "1px solid #F3F2F1",
-                      background: m.isActive ? "#FAFAFA" : "#FAF9F8",
-                      opacity: m.isActive ? 1 : 0.65,
-                    }}
-                  >
-                    {/* Avatar */}
-                    <div style={{
-                      width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-                      background: rc.bg, border: `1px solid ${rc.border}`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 13, fontWeight: 700, color: rc.color, fontFamily: F,
-                    }}>
-                      {m.displayName.charAt(0).toUpperCase()}
-                    </div>
-                    {/* Info */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
+
+          {/* ── Pestaña Miembros ─────────────────────── */}
+          {activeTab === "members" && (
+            loadingMembers ? (
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                gap: 8, padding: 32, color: "#605E5C", fontFamily: F, fontSize: 13,
+              }}>
+                <RotateCw size={16} style={{ animation: "spin 1s linear infinite" }} />
+                Cargando miembros…
+              </div>
+            ) : members.length === 0 ? (
+              <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center",
+                padding: "32px 16px", gap: 8, color: "#A19F9D",
+              }}>
+                <Users size={32} strokeWidth={1.5} color="#EDEBE9" />
+                <div style={{ fontSize: 13, fontFamily: F }}>Este equipo no tiene miembros aún</div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {members.map((m) => {
+                  const rc = ROLE_CHIP[m.role] ?? ROLE_CHIP["Invitado"];
+                  return (
+                    <div
+                      key={m.id}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 12,
+                        padding: "10px 14px", borderRadius: 8,
+                        border: "1px solid #F3F2F1",
+                        background: m.isActive ? "#FAFAFA" : "#FAF9F8",
+                        opacity: m.isActive ? 1 : 0.65,
+                      }}
+                    >
                       <div style={{
-                        fontSize: 13, fontWeight: 600, color: "#201F1E",
-                        fontFamily: F, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                        background: rc.bg, border: `1px solid ${rc.border}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 13, fontWeight: 700, color: rc.color, fontFamily: F,
                       }}>
-                        {m.displayName}
+                        {m.displayName.charAt(0).toUpperCase()}
                       </div>
-                      <div style={{
-                        fontSize: 11, color: "#A19F9D", fontFamily: F,
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontSize: 13, fontWeight: 600, color: "#201F1E",
+                          fontFamily: F, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          {m.displayName}
+                        </div>
+                        <div style={{
+                          fontSize: 11, color: "#A19F9D", fontFamily: F,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          {m.email}
+                        </div>
+                      </div>
+                      <span style={{
+                        display: "inline-flex", alignItems: "center",
+                        padding: "2px 8px", borderRadius: 20,
+                        fontSize: 10, fontWeight: 700, flexShrink: 0,
+                        background: rc.bg, color: rc.color, border: `1px solid ${rc.border}`,
+                        fontFamily: F,
                       }}>
-                        {m.email}
+                        {m.role}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          )}
+
+          {/* ── Pestaña Proyectos con acceso ──────────── */}
+          {activeTab === "projects" && (
+            teamProjects.length === 0 ? (
+              <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center",
+                padding: "32px 16px", gap: 8, color: "#A19F9D",
+              }}>
+                <FolderOpen size={32} strokeWidth={1.5} color="#EDEBE9" />
+                <div style={{ fontSize: 13, fontFamily: F }}>Ningún proyecto asigna visibilidad a este equipo</div>
+                <div style={{ fontSize: 11, color: "#C8C6C4", fontFamily: F, textAlign: "center", maxWidth: 280 }}>
+                  La visibilidad de los proyectos se configura en la pantalla de Proyectos
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {/* Aviso solo lectura */}
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "8px 12px", borderRadius: 6,
+                  background: "#FFF4CE", border: "1px solid #F2D98B",
+                  fontSize: 11, color: "#835B00", fontFamily: F, marginBottom: 4,
+                }}>
+                  <Eye size={12} style={{ flexShrink: 0 }} />
+                  Solo lectura — la visibilidad se edita desde cada proyecto
+                </div>
+
+                {teamProjects.map((p) => {
+                  const sc = STATUS_CFG[p.status] ?? STATUS_CFG["Pendiente"];
+                  const isRestricted = p.visibilityMode === "Restricted";
+                  return (
+                    <div
+                      key={p.id}
+                      style={{
+                        padding: "12px 14px", borderRadius: 8,
+                        border: "1px solid #F3F2F1",
+                        background: "#FAFAFA",
+                        display: "flex", flexDirection: "column", gap: 6,
+                      }}
+                    >
+                      {/* Fila superior: código + nombre */}
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                        <div style={{
+                          padding: "3px 8px", borderRadius: 4,
+                          background: "#F3F2F1", color: "#605E5C",
+                          fontSize: 10, fontWeight: 700, fontFamily: F,
+                          flexShrink: 0, marginTop: 1,
+                        }}>
+                          {p.code}
+                        </div>
+                        <div style={{
+                          fontSize: 13, fontWeight: 600, color: "#201F1E",
+                          fontFamily: F, flex: 1, lineHeight: 1.35,
+                        }}>
+                          {p.name}
+                        </div>
+                      </div>
+
+                      {/* Fila inferior: estado + visibilidad */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        {/* Estado del proyecto */}
+                        <span style={{
+                          display: "inline-flex", alignItems: "center",
+                          padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 700,
+                          background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
+                          fontFamily: F,
+                        }}>
+                          {p.status}
+                        </span>
+
+                        {/* Badge visibilityMode */}
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: 4,
+                          padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 700,
+                          background: isRestricted ? "#F8F0FF" : "#EFF6FC",
+                          color: isRestricted ? "#7530AF" : "#0078D4",
+                          border: `1px solid ${isRestricted ? "#D8B4FE" : "#C7E0F4"}`,
+                          fontFamily: F,
+                        }}>
+                          {isRestricted
+                            ? <><Lock size={9} /> Restringido</>  
+                            : <><Globe size={9} /> Enterprise</>
+                          }
+                        </span>
+
+                        {/* Nº total de equipos con visibilidad */}
+                        {isRestricted && (
+                          <span style={{
+                            fontSize: 10, color: "#A19F9D", fontFamily: F,
+                          }}>
+                            ({(p.visibilityTeamIds ?? []).length} equipo{(p.visibilityTeamIds ?? []).length !== 1 ? "s" : ""} con acceso)
+                          </span>
+                        )}
                       </div>
                     </div>
-                    {/* Role chip */}
-                    <span style={{
-                      display: "inline-flex", alignItems: "center",
-                      padding: "2px 8px", borderRadius: 20,
-                      fontSize: 10, fontWeight: 700, flexShrink: 0,
-                      background: rc.bg, color: rc.color, border: `1px solid ${rc.border}`,
-                      fontFamily: F,
-                    }}>
-                      {m.role}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
 
@@ -667,6 +829,7 @@ export const AdminTeamsPage: React.FC = () => {
   // ── Estado ────────────────────────────────────────────
   const [teams,      setTeams]      = useState<Team[]>([]);
   const [allUsers,   setAllUsers]   = useState<AppUser[]>([]);
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [toasts,     setToasts]     = useState<ToastMsg[]>([]);
 
@@ -702,12 +865,14 @@ export const AdminTeamsPage: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [teamsData, usersData] = await Promise.all([
+      const [teamsData, usersData, projectsData] = await Promise.all([
         listTeams(),
         listAppUsers({ isActive: undefined }),
+        getProjects(),
       ]);
       setTeams(teamsData);
       setAllUsers(usersData);
+      setAllProjects(projectsData);
     } catch (e: unknown) {
       addToast(e instanceof Error ? e.message : "Error al cargar los datos.", false);
     } finally {
@@ -745,6 +910,10 @@ export const AdminTeamsPage: React.FC = () => {
   // ── Conteo de miembros por equipo ─────────────────────
   const memberCount = (teamId: string) =>
     allUsers.filter((u) => u.teamIds.includes(teamId)).length;
+
+  // ── Proyectos que dan visibilidad a un equipo ──────────
+  const projectsForTeam = (teamId: string): Project[] =>
+    allProjects.filter((p) => (p.visibilityTeamIds ?? []).includes(teamId));
 
   // ── Acciones ──────────────────────────────────────────
   const openCreate = () => setFormDrawer({ open: true, mode: "add", team: null });
@@ -978,6 +1147,7 @@ export const AdminTeamsPage: React.FC = () => {
                 <th style={thSt}>Nombre</th>
                 <th style={thSt}>Tipo</th>
                 <th style={{ ...thSt, textAlign: "center" }}>Miembros</th>
+                <th style={{ ...thSt, textAlign: "center" }}>Proyectos</th>
                 <th style={thSt}>Estado</th>
                 <th style={{ ...thSt, textAlign: "right" }}>Acciones</th>
               </tr>
@@ -1035,6 +1205,26 @@ export const AdminTeamsPage: React.FC = () => {
                         <Users size={11} strokeWidth={2} />
                         {count}
                       </span>
+                    </td>
+
+                    {/* Proyectos con visibilidad */}
+                    <td style={{ ...tdSt, textAlign: "center" }}>
+                      {(() => {
+                        const pCount = projectsForTeam(team.id).length;
+                        return (
+                          <span style={{
+                            display: "inline-flex", alignItems: "center", gap: 5,
+                            padding: "4px 12px", borderRadius: 20,
+                            background: pCount > 0 ? "#F8F0FF" : "#FAF9F8",
+                            color: pCount > 0 ? "#7530AF" : "#A19F9D",
+                            fontSize: 12, fontWeight: 700, fontFamily: F,
+                            border: `1px solid ${pCount > 0 ? "#D8B4FE" : "#EDEBE9"}`,
+                          }}>
+                            <FolderOpen size={11} strokeWidth={2} />
+                            {pCount}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     {/* Estado */}
@@ -1118,6 +1308,7 @@ export const AdminTeamsPage: React.FC = () => {
         team={detailDrawer.team}
         members={members}
         loadingMembers={loadingMembers}
+        teamProjects={detailDrawer.team ? projectsForTeam(detailDrawer.team.id) : []}
         onClose={() => setDetailDrawer({ open: false, team: null })}
         onNavigateUsers={(teamId) => navigate(`/admin/users?teamId=${teamId}`)}
         onEdit={openEdit}
