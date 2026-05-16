@@ -29,7 +29,17 @@ import type {
 } from "../types/domain";
 
 import { sdkGet, sdkGetOne, sdkCreate, sdkUpdate, sdkDelete, IS_LOCAL } from "./dataverseSdk";
+import { searchTenantUsersViaOffice365 } from "./office365Connector";
 export { IS_LOCAL };
+
+// ── Usuario efectivo (real o impersonado) ─────────────────────────────────
+// Establecido por ImpersonationContext cuando effectiveUser cambia.
+// Usado por GET /me para devolver el usuario actual a las pantallas.
+let _effectiveUser: { id: string; displayName: string; email: string; role: string; teamIds?: string[]; } | null = null;
+
+export function setBridgeEffectiveUser(user: { id: string; displayName: string; email: string; role: string; teamIds?: string[]; }): void {
+  _effectiveUser = user;
+}
 
 // ── Compatibilidad: getXrm() devuelve la misma interfaz que antes ─────────
 // pero internamente delega en el SDK con cola de escrituras.
@@ -103,7 +113,7 @@ const SEL = {
                 "cproroad_requireuserassignment,cproroad_requireevidence," +
                 "cproroad_evidencetypes,cproroad_requirecomment,cproroad_confirmmove",
   appUser:      "$select=cproroad_appuserid,cproroad_name,cproroad_email," +
-                "cproroad_upn,cproroad_role,cproroad_isactive",
+                "cproroad_upn,cproroad_role,cproroad_isactive,cproroad_teamids",
   project:      "$select=cproroad_projectid,cproroad_name,cproroad_code," +
                 "cproroad_status,cproroad_priority,cproroad_category," +
                 "cproroad_startdate,cproroad_enddate,cproroad_progress," +
@@ -249,6 +259,18 @@ function safeJson<T>(v: string | null | undefined, fallback: T): T {
   try { return JSON.parse(v) as T; } catch { return fallback; }
 }
 
+// Parsea un campo JSON que puede ser un array ["a","b"] o un escalar "a"
+// (PowerShell serializa arrays de un elemento como escalar, no como array)
+function safeJsonArr(v: string | null | undefined): string[] {
+  if (!v) return [];
+  try {
+    const parsed = JSON.parse(v);
+    if (Array.isArray(parsed)) return parsed as string[];
+    if (parsed != null && parsed !== "") return [String(parsed)];
+    return [];
+  } catch { return []; }
+}
+
 function id(r: any, col: string): string {
   return (r[col] ?? "") as string;
 }
@@ -297,12 +319,12 @@ function dvToTransition(r: any): Transition {
     id: id(r, "cproroad_transitionid"),
     fromStateId: lookup(r, "cproroad_fromstateid") ?? "",
     toStateId:   lookup(r, "cproroad_tostateid") ?? "",
-    allowedRoles:          safeJson(r.cproroad_allowedroles, []),
-    assignToRole:          safeJson(r.cproroad_assigntorole, undefined),
+    allowedRoles:          safeJsonArr(r.cproroad_allowedroles) as AppRole[],
+    assignToRole:          safeJsonArr(r.cproroad_assigntorole) as AppRole[],
     autoAssignTeam:        r.cproroad_autoassignteam ?? false,
     requireUserAssignment: r.cproroad_requireuserassignment ?? false,
     requireEvidence:       r.cproroad_requireevidence ?? false,
-    evidenceTypes:         safeJson(r.cproroad_evidencetypes, undefined),
+    evidenceTypes:         safeJsonArr(r.cproroad_evidencetypes) as EvidenceType[],
     requireComment:        r.cproroad_requirecomment ?? false,
     confirmMove:           r.cproroad_confirmmove ?? false,
   };
@@ -315,7 +337,7 @@ function dvToAppUser(r: any): AppUser {
     email:    r.cproroad_email ?? "",
     upn:      r.cproroad_upn ?? "",
     role:     choice(r, "cproroad_role", ROLE_F, "Invitado"),
-    teamIds:  [], // TODO: cargar desde userTeam (N:N pendiente de agregar a DV)
+    teamIds:  safeJsonArr(r.cproroad_teamids) as string[],
     isActive: r.cproroad_isactive ?? true,
   };
 }
@@ -360,15 +382,15 @@ function projectToDv(p: Partial<Project>): Record<string, any> {
   if (p.deliveryOwnerType !== undefined) dv.cproroad_deliveryownertype = DLVOWN_T[p.deliveryOwnerType];
   if (p.visibilityMode !== undefined)   dv.cproroad_visibilitymode = VIS_T[p.visibilityMode];
   if (p.businessAreaId)
-    dv[`cproroad_BusinessAreaId@odata.bind`] = bind(E.businessArea + "s", p.businessAreaId);
+    dv[`cproroad_businessareaid@odata.bind`] = bind(E.businessArea + "s", p.businessAreaId);
   if (p.providerTeamId !== undefined)
-    dv[`cproroad_ProviderTeamId@odata.bind`] = bind(E.team + "s", p.providerTeamId);
+    dv[`cproroad_providerteamid@odata.bind`] = bind(E.team + "s", p.providerTeamId);
   if (p.assignedToTeamId !== undefined)
-    dv[`cproroad_AssignedToTeamId@odata.bind`] = bind(E.team + "s", p.assignedToTeamId);
+    dv[`cproroad_assignedtoteamid@odata.bind`] = bind(E.team + "s", p.assignedToTeamId);
   if (p.assignedToUserId !== undefined)
-    dv[`cproroad_AssignedToUserId@odata.bind`] = bind(E.appUser + "s", p.assignedToUserId);
+    dv[`cproroad_assignedtouserid@odata.bind`] = bind(E.appUser + "s", p.assignedToUserId);
   if (p.requestedByUserId !== undefined)
-    dv[`cproroad_RequestedByUserId@odata.bind`] = bind(E.appUser + "s", p.requestedByUserId);
+    dv[`cproroad_requestedbyuserid@odata.bind`] = bind(E.appUser + "s", p.requestedByUserId);
   return dv;
 }
 
@@ -417,15 +439,15 @@ function workItemToDv(wi: Partial<WorkItem & { description?: string }>): Record<
   if (wi.jiraState     !== undefined) dv.cproroad_jirastate    = wi.jiraState;
   if (wi.sprintName    !== undefined) dv.cproroad_sprintname   = wi.sprintName;
   if (wi.projectId)
-    dv[`cproroad_ProjectId@odata.bind`] = bind(E.project + "s", wi.projectId);
+    dv[`cproroad_projectid@odata.bind`] = bind(E.project + "s", wi.projectId);
   if (wi.stateId)
-    dv[`cproroad_StateId@odata.bind`] = bind(E.state + "s", wi.stateId);
+    dv[`cproroad_stateid@odata.bind`] = bind(E.state + "s", wi.stateId);
   if (wi.assignedToTeamId !== undefined)
-    dv[`cproroad_AssignedToTeamId@odata.bind`] = bind(E.team + "s", wi.assignedToTeamId);
+    dv[`cproroad_assignedtoteamid@odata.bind`] = bind(E.team + "s", wi.assignedToTeamId);
   if (wi.assignedToUserId)
-    dv[`cproroad_AssignedToUserId@odata.bind`] = bind(E.appUser + "s", wi.assignedToUserId);
+    dv[`cproroad_assignedtouserid@odata.bind`] = bind(E.appUser + "s", wi.assignedToUserId);
   if (wi.requestedByUserId)
-    dv[`cproroad_RequestedByUserId@odata.bind`] = bind(E.appUser + "s", wi.requestedByUserId);
+    dv[`cproroad_requestedbyuserid@odata.bind`] = bind(E.appUser + "s", wi.requestedByUserId);
   return dv;
 }
 
@@ -631,7 +653,7 @@ async function logActivity(entry: {
     cproroad_note:       entry.note ?? "",
   };
   if (entry.projectId)
-    dv[`cproroad_ProjectId@odata.bind`] = bind(E.project + "s", entry.projectId);
+    dv[`cproroad_projectid@odata.bind`] = bind(E.project + "s", entry.projectId);
   await getXrm().createRecord(E.activityLog, dv).catch(() => { /* best-effort */ });
 }
 
@@ -661,6 +683,21 @@ export async function dvRequest<T>(
   let   params : Record<string, string> | null;
 
   // ════════════════════════════════════════════════════════
+  //  CURRENT USER (/me)
+  // ════════════════════════════════════════════════════════
+  if (method === "GET" && match(base, "/me")) {
+    if (!_effectiveUser) {
+      throw new Error("[dataverseBridge] GET /me: usuario no inicializado — setBridgeEffectiveUser no fue llamado");
+    }
+    return {
+      id:          _effectiveUser.id,
+      displayName: _effectiveUser.displayName,
+      email:       _effectiveUser.email,
+      roles:       [_effectiveUser.role as AppRole],
+    } as unknown as T;
+  }
+
+  // ════════════════════════════════════════════════════════
   //  BUSINESS AREAS
   // ════════════════════════════════════════════════════════
   if (method === "GET" && match(base, "/business-areas")) {
@@ -671,7 +708,7 @@ export async function dvRequest<T>(
   // ════════════════════════════════════════════════════════
   //  TEAMS / PROVIDERS
   // ════════════════════════════════════════════════════════
-  if (method === "GET" && match(base, "/admin/providers")) {
+  if (method === "GET" && (match(base, "/admin/providers") || match(base, "/providers"))) {
     const r = await api.retrieveMultipleRecords(
       E.team, `?${SEL.team}&$filter=cproroad_type eq ${100000001}`,
     );
@@ -777,8 +814,8 @@ export async function dvRequest<T>(
       cproroad_requirecomment:      b.requireComment ?? false,
       cproroad_confirmmove:         b.confirmMove ?? false,
     };
-    if (b.fromStateId) dv[`cproroad_FromStateId@odata.bind`] = bind(E.state + "s", b.fromStateId);
-    if (b.toStateId)   dv[`cproroad_ToStateId@odata.bind`]   = bind(E.state + "s", b.toStateId);
+    if (b.fromStateId) dv[`cproroad_fromstateid@odata.bind`] = bind(E.state + "s", b.fromStateId);
+    if (b.toStateId)   dv[`cproroad_tostateid@odata.bind`]   = bind(E.state + "s", b.toStateId);
     const created = await api.createRecord(E.transition, dv);
     const r = await api.retrieveRecord(E.transition, created.id, `?${SEL.transition}`);
     return dvToTransition(r) as unknown as T;
@@ -800,8 +837,8 @@ export async function dvRequest<T>(
     if (b.evidenceTypes !== undefined)        dv.cproroad_evidencetypes          = JSON.stringify(b.evidenceTypes);
     if (b.requireComment !== undefined)       dv.cproroad_requirecomment         = b.requireComment;
     if (b.confirmMove !== undefined)          dv.cproroad_confirmmove            = b.confirmMove;
-    if (b.fromStateId) dv[`cproroad_FromStateId@odata.bind`] = bind(E.state + "s", b.fromStateId);
-    if (b.toStateId)   dv[`cproroad_ToStateId@odata.bind`]   = bind(E.state + "s", b.toStateId);
+    if (b.fromStateId) dv[`cproroad_fromstateid@odata.bind`] = bind(E.state + "s", b.fromStateId);
+    if (b.toStateId)   dv[`cproroad_tostateid@odata.bind`]   = bind(E.state + "s", b.toStateId);
     await api.updateRecord(E.transition, params.id, dv);
     const r = await api.retrieveRecord(E.transition, params.id, `?${SEL.transition}`);
     return dvToTransition(r) as unknown as T;
@@ -844,8 +881,8 @@ export async function dvRequest<T>(
         cproroad_evidencetypes:          JSON.stringify(d.evTypes),
         cproroad_requirecomment:         d.reqComment,
         cproroad_confirmmove:            d.confirm,
-        [`cproroad_FromStateId@odata.bind`]: bind(E.state + "s", fromId),
-        [`cproroad_ToStateId@odata.bind`]:   bind(E.state + "s", toId),
+        [`cproroad_fromstateid@odata.bind`]: bind(E.state + "s", fromId),
+        [`cproroad_tostateid@odata.bind`]:   bind(E.state + "s", toId),
       };
       const c = await api.createRecord(E.transition, dv);
       const r = await api.retrieveRecord(E.transition, c.id, `?${SEL.transition}`);
@@ -874,8 +911,6 @@ export async function dvRequest<T>(
   //  APP-USERS (userService.ts)
   // ════════════════════════════════════════════════════════
   if (method === "GET" && match(base, "/app-users")) {
-    // Sin relación team→appUser en Dataverse (N:M pendiente): devolver vacío cuando se filtra por equipo
-    if (qp.get("teamId")) return [] as unknown as T;
     const filters: string[] = [];
     if (qp.get("isActive") !== null && qp.get("isActive") !== "")
       filters.push(`cproroad_isactive eq ${qp.get("isActive") === "true"}`);
@@ -886,6 +921,8 @@ export async function dvRequest<T>(
     const filter = filters.length ? `&$filter=${filters.join(" and ")}` : "";
     const r = await api.retrieveMultipleRecords(E.appUser, `?${SEL.appUser}${filter}`);
     let users = r.entities.map(dvToAppUser);
+    const teamId = qp.get("teamId");
+    if (teamId) users = users.filter((u) => u.teamIds.includes(teamId));
     const q = qp.get("query")?.toLowerCase();
     if (q) users = users.filter(u =>
       u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
@@ -906,6 +943,7 @@ export async function dvRequest<T>(
       cproroad_upn:      b.upn,
       cproroad_role:     ROLE_T[b.role],
       cproroad_isactive: true,
+      cproroad_teamids:  JSON.stringify(b.teamIds ?? []),
     };
     const created = await api.createRecord(E.appUser, dv);
     invalidateUserCache();
@@ -918,6 +956,7 @@ export async function dvRequest<T>(
     const dv: Record<string, any> = {};
     if (b.role !== undefined)     dv.cproroad_role     = ROLE_T[b.role];
     if (b.isActive !== undefined) dv.cproroad_isactive = b.isActive;
+    if (b.teamIds !== undefined)  dv.cproroad_teamids  = JSON.stringify(b.teamIds);
     await api.updateRecord(E.appUser, params.id, dv);
     invalidateUserCache();
     const r = await api.retrieveRecord(E.appUser, params.id, `?${SEL.appUser}`);
@@ -950,8 +989,25 @@ export async function dvRequest<T>(
       if (rv !== undefined) filters.push(`cproroad_role eq ${rv}`);
     }
     const filter = filters.length ? `&$filter=${filters.join(" and ")}` : "";
-    const r = await api.retrieveMultipleRecords(E.appUser, `?${SEL.appUser}${filter}`);
-    let users = r.entities.map(dvToAppUser);
+    const [r, upR] = await Promise.all([
+      api.retrieveMultipleRecords(E.appUser, `?${SEL.appUser}${filter}`),
+      api.retrieveMultipleRecords(E.userProfile,
+        "?$select=_cproroad_userid_value,_cproroad_profileid_value"),
+    ]);
+    // Agrupar profileIds por userId
+    const profilesByUser = new Map<string, string[]>();
+    upR.entities.forEach((up: any) => {
+      const uid = lookup(up, "cproroad_userid");
+      const pid = lookup(up, "cproroad_profileid");
+      if (uid && pid) {
+        if (!profilesByUser.has(uid)) profilesByUser.set(uid, []);
+        profilesByUser.get(uid)!.push(pid);
+      }
+    });
+    let users = r.entities.map(dvToAppUser).map(u => ({
+      ...u,
+      profileIds: profilesByUser.get(u.id) ?? [],
+    }));
     const q = qp.get("query")?.toLowerCase();
     if (q) users = users.filter(u =>
       u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
@@ -1080,12 +1136,12 @@ export async function dvRequest<T>(
     const current = await api.retrieveRecord(E.workItem, params.id, `?${SEL.workItem}`);
 
     const dv: Record<string, any> = {};
-    dv[`cproroad_StateId@odata.bind`] = bind(E.state + "s", b.toStateId);
+    dv[`cproroad_stateid@odata.bind`] = bind(E.state + "s", b.toStateId);
     if (b.assignedToUserId) {
-      dv[`cproroad_AssignedToUserId@odata.bind`] = bind(E.appUser + "s", b.assignedToUserId);
+      dv[`cproroad_assignedtouserid@odata.bind`] = bind(E.appUser + "s", b.assignedToUserId);
     }
     if (b.assignedToTeamId !== undefined) {
-      dv[`cproroad_AssignedToTeamId@odata.bind`] = bind(E.team + "s", b.assignedToTeamId);
+      dv[`cproroad_assignedtoteamid@odata.bind`] = bind(E.team + "s", b.assignedToTeamId);
     }
     await api.updateRecord(E.workItem, params.id, dv);
 
@@ -1151,7 +1207,7 @@ export async function dvRequest<T>(
       cproroad_value:      b.value,
       cproroad_comment:    b.comment,
     };
-    if (b.createdBy) dv[`cproroad_CreatedByUserId@odata.bind`] = bind(E.appUser + "s", b.createdBy);
+    if (b.createdBy) dv[`cproroad_createdbyuserid@odata.bind`] = bind(E.appUser + "s", b.createdBy);
     const created = await api.createRecord(E.evidence, dv);
     const r = await api.retrieveRecord(E.evidence, created.id, `?${SEL.evidence}`);
     return dvToEvidence(r) as unknown as T;
@@ -1192,9 +1248,9 @@ export async function dvRequest<T>(
       cproroad_duedate:     b.dueDate,
       cproroad_status:      100000000, // Abierto
     };
-    if (b.projectId)        dv[`cproroad_ProjectId@odata.bind`]    = bind(E.project + "s", b.projectId);
-    if (b.assignedToUserId) dv[`cproroad_AssignedToUserId@odata.bind`] = bind(E.appUser + "s", b.assignedToUserId);
-    if (b.linkedWorkItemId) dv[`cproroad_LinkedWorkItemId@odata.bind`] = bind(E.workItem + "s", b.linkedWorkItemId);
+    if (b.projectId)        dv[`cproroad_projectid@odata.bind`]    = bind(E.project + "s", b.projectId);
+    if (b.assignedToUserId) dv[`cproroad_assignedtouserid@odata.bind`] = bind(E.appUser + "s", b.assignedToUserId);
+    if (b.linkedWorkItemId) dv[`cproroad_linkedworkitemid@odata.bind`] = bind(E.workItem + "s", b.linkedWorkItemId);
     const created = await api.createRecord(E.risk, dv);
     const r = await api.retrieveRecord(E.risk, created.id, `?${SEL.risk}`);
     return dvToRisk(r) as unknown as T;
@@ -1210,7 +1266,7 @@ export async function dvRequest<T>(
     if (b.dueDate     !== undefined) dv.cproroad_duedate     = b.dueDate;
     if (b.status      !== undefined) dv.cproroad_status      = RSKST_T[b.status as RiskStatus];
     if (b.linkedWorkItemId !== undefined)
-      dv[`cproroad_LinkedWorkItemId@odata.bind`] = bind(E.workItem + "s", b.linkedWorkItemId);
+      dv[`cproroad_linkedworkitemid@odata.bind`] = bind(E.workItem + "s", b.linkedWorkItemId);
     await api.updateRecord(E.risk, params.id, dv);
     const r = await api.retrieveRecord(E.risk, params.id, `?${SEL.risk}`);
     return dvToRisk(r) as unknown as T;
@@ -1223,7 +1279,7 @@ export async function dvRequest<T>(
       cproroad_closecomment: b.closeComment,
       cproroad_closedon:     new Date().toISOString(),
     };
-    if (b.closedBy) dv[`cproroad_ClosedByUserId@odata.bind`] = bind(E.appUser + "s", b.closedBy);
+    if (b.closedBy) dv[`cproroad_closedbyuserid@odata.bind`] = bind(E.appUser + "s", b.closedBy);
     await api.updateRecord(E.risk, params.id, dv);
     const r = await api.retrieveRecord(E.risk, params.id, `?${SEL.risk}`);
     return dvToRisk(r) as unknown as T;
@@ -1264,9 +1320,9 @@ export async function dvRequest<T>(
       cproroad_priority:    PRI_T[b.priority as Priority],
       cproroad_status:      REQST_T["Nuevo"],
     };
-    if (b.requestedByUserId) dv[`cproroad_RequestedByUserId@odata.bind`]  = bind(E.appUser + "s", b.requestedByUserId);
-    if (b.requestedByTeamId) dv[`cproroad_RequestedByTeamId@odata.bind`]  = bind(E.team + "s", b.requestedByTeamId);
-    if (b.relatedProjectId)  dv[`cproroad_RelatedProjectId@odata.bind`]   = bind(E.project + "s", b.relatedProjectId);
+    if (b.requestedByUserId) dv[`cproroad_requestedbyuserid@odata.bind`]  = bind(E.appUser + "s", b.requestedByUserId);
+    if (b.requestedByTeamId) dv[`cproroad_requestedbyteamid@odata.bind`]  = bind(E.team + "s", b.requestedByTeamId);
+    if (b.relatedProjectId)  dv[`cproroad_relatedprojectid@odata.bind`]   = bind(E.project + "s", b.relatedProjectId);
     const created = await api.createRecord(E.request, dv);
     const r = await api.retrieveRecord(E.request, created.id, `?${SEL.request}`);
     return dvToRequest(r, userMap) as unknown as T;
@@ -1281,7 +1337,7 @@ export async function dvRequest<T>(
     if (b.type        !== undefined) dv.cproroad_type        = REQTYPE_T[b.type as RequestType];
     if (b.priority    !== undefined) dv.cproroad_priority    = PRI_T[b.priority as Priority];
     if (b.relatedProjectId !== undefined)
-      dv[`cproroad_RelatedProjectId@odata.bind`] = bind(E.project + "s", b.relatedProjectId);
+      dv[`cproroad_relatedprojectid@odata.bind`] = bind(E.project + "s", b.relatedProjectId);
     await api.updateRecord(E.request, params.id, dv);
     const r = await api.retrieveRecord(E.request, created.id ?? params.id, `?${SEL.request}`);
     return dvToRequest(r, userMap) as unknown as T;
@@ -1300,7 +1356,7 @@ export async function dvRequest<T>(
       cproroad_triagenote: b.note ?? "",
     };
     if (b.triageOwnerUserId)
-      dv[`cproroad_TriageOwnerUserId@odata.bind`] = bind(E.appUser + "s", b.triageOwnerUserId);
+      dv[`cproroad_triageowneruserid@odata.bind`] = bind(E.appUser + "s", b.triageOwnerUserId);
     await api.updateRecord(E.request, params.id, dv);
     const r = await api.retrieveRecord(E.request, params.id, `?${SEL.request}`);
     return dvToRequest(r, userMap) as unknown as T;
@@ -1317,14 +1373,14 @@ export async function dvRequest<T>(
       cproroad_progress: 0,
       cproroad_syncstatus: 100000001,
     };
-    if (b.projectId)        wiDv[`cproroad_ProjectId@odata.bind`]       = bind(E.project + "s", b.projectId);
-    if (b.assignedToUserId) wiDv[`cproroad_AssignedToUserId@odata.bind`] = bind(E.appUser + "s", b.assignedToUserId);
-    if (b.assignedToTeamId) wiDv[`cproroad_AssignedToTeamId@odata.bind`] = bind(E.team + "s", b.assignedToTeamId);
+    if (b.projectId)        wiDv[`cproroad_projectid@odata.bind`]       = bind(E.project + "s", b.projectId);
+    if (b.assignedToUserId) wiDv[`cproroad_assignedtouserid@odata.bind`] = bind(E.appUser + "s", b.assignedToUserId);
+    if (b.assignedToTeamId) wiDv[`cproroad_assignedtoteamid@odata.bind`] = bind(E.team + "s", b.assignedToTeamId);
     const wiCreated = await api.createRecord(E.workItem, wiDv);
     // Actualizar request: Convertida + vínculo al workitem
     await api.updateRecord(E.request, params.id, {
       cproroad_status: REQST_T["Convertida"],
-      [`cproroad_ConvertedWorkItemId@odata.bind`]: bind(E.workItem + "s", wiCreated.id),
+      [`cproroad_convertedworkitemid@odata.bind`]: bind(E.workItem + "s", wiCreated.id),
     });
     const r = await api.retrieveRecord(E.request, params.id, `?${SEL.request}`);
     return dvToRequest(r, userMap) as unknown as T;
@@ -1413,7 +1469,7 @@ export async function dvRequest<T>(
         await api.updateRecord(E.wipConfig, existing.entities[0].cproroad_wipconfigid as string, dv);
       } else {
         dv.cproroad_name = `WIP-${stateId}`;
-        dv[`cproroad_StateId@odata.bind`] = bind(E.state + "s", stateId);
+        dv[`cproroad_stateid@odata.bind`] = bind(E.state + "s", stateId);
         await api.createRecord(E.wipConfig, dv);
       }
     }
@@ -1525,7 +1581,7 @@ export async function dvRequest<T>(
     const dv: Record<string, any> = {
       cproroad_name:          b.permissionKey,
       cproroad_permissionkey: b.permissionKey,
-      [`cproroad_ProfileId@odata.bind`]: bind(E.permissionProfile + "s", b.profileId),
+      [`cproroad_profileid@odata.bind`]: bind(E.permissionProfile + "s", b.profileId),
     };
     const created = await api.createRecord(E.profilePermission, dv);
     const r = await api.retrieveRecord(E.profilePermission, created.id, `?${SEL.profPerm}`);
@@ -1553,8 +1609,8 @@ export async function dvRequest<T>(
     const dv: Record<string, any> = {
       cproroad_name:    `UP-${params.userId}-${b.profileId}`,
       cproroad_assignedon: new Date().toISOString(),
-      [`cproroad_UserId@odata.bind`]:   bind(E.appUser + "s", params.userId),
-      [`cproroad_ProfileId@odata.bind`]: bind(E.permissionProfile + "s", b.profileId),
+      [`cproroad_userid@odata.bind`]:   bind(E.appUser + "s", params.userId),
+      [`cproroad_profileid@odata.bind`]: bind(E.permissionProfile + "s", b.profileId),
     };
     const created = await api.createRecord(E.userProfile, dv);
     invalidateUserCache();
@@ -1604,7 +1660,7 @@ export async function dvRequest<T>(
       recId = existing.entities[0].cproroad_userpermissionoverrideid as string;
       await api.updateRecord(E.userPermOverride, recId, dv);
     } else {
-      dv[`cproroad_UserId@odata.bind`] = bind(E.appUser + "s", params.userId);
+      dv[`cproroad_userid@odata.bind`] = bind(E.appUser + "s", params.userId);
       const created = await api.createRecord(E.userPermOverride, dv);
       recId = created.id;
     }
@@ -1622,6 +1678,16 @@ export async function dvRequest<T>(
   // ════════════════════════════════════════════════════════
   if (method === "GET" && (params = match(base, "/users/:userId/effective-permissions"))) {
     return computeEffectivePermissions(params.userId) as unknown as T;
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  TENANT USER SEARCH (Office 365 Users connector)
+  // ════════════════════════════════════════════════════════
+
+  if (method === "GET" && match(base, "/admin/tenant-users")) {
+    const q = qp.get("q") ?? "";
+    const results = await searchTenantUsersViaOffice365(q);
+    return results as unknown as T;
   }
 
   // ════════════════════════════════════════════════════════

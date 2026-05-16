@@ -19,6 +19,7 @@ import React, {
 } from "react";
 import type { AppRole } from "./permissions";
 import { apiClient } from "../services/apiClient";
+import { setBridgeEffectiveUser } from "../services/dataverseBridge";
 
 // ── AppUser (de /api/appusers o db.json) ──────────────────────────
 export interface AppUser {
@@ -103,6 +104,12 @@ export const ImpersonationProvider: React.FC<Props> = ({ realUser, children }) =
   }, []);
 
   const effectiveUser = impersonatedUser ?? realUser;
+
+  // Sincronizar el usuario efectivo al bridge para que GET /me lo devuelva.
+  // Se ejecuta en cada cambio: al montar (usuario real), al impersonar y al limpiar.
+  useEffect(() => {
+    setBridgeEffectiveUser(effectiveUser);
+  }, [effectiveUser]);
 
   const value = useMemo<ImpersonationValue>(() => ({
     realUser,

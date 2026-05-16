@@ -99,3 +99,14 @@ HE LANZODO LOS PROMPT EN EL SIGUIENTE ORDEN
     style:     cambios de UI/CSS sin lógica
     refactor:  reorganización de código
 
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Orden de inserción en PROD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. cproroad_rbacpermission     ← sin FK externas
+2. cproroad_businessarea       ← sin FK externas  
+3. cproroad_team               ← sin FK externas
+4. cproroad_appuser            ← sin FK externas
+5. cproroad_rolepermission     ← sin FK externas
+6. cproroad_state              ← sin FK externas
+7. cproroad_transition         ← referencia cproroad_state (debe ir después)
