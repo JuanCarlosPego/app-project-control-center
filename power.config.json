@@ -10,5 +10,115 @@
   "localAppUrl": "http://localhost:3000",
   "logoPath": "Default",
   "connectionReferences": {},
-  "databaseReferences": {}
+  "databaseReferences": {
+    "default.cds": {
+      "dataSources": {
+        "cproroad_businessarea": {
+          "entitySetName": "cproroad_businessareas",
+          "logicalName": "cproroad_businessarea",
+          "isHidden": false
+        },
+        "cproroad_team": {
+          "entitySetName": "cproroad_teams",
+          "logicalName": "cproroad_team",
+          "isHidden": false
+        },
+        "cproroad_state": {
+          "entitySetName": "cproroad_states",
+          "logicalName": "cproroad_state",
+          "isHidden": false
+        },
+        "cproroad_appuser": {
+          "entitySetName": "cproroad_appusers",
+          "logicalName": "cproroad_appuser",
+          "isHidden": false
+        },
+        "cproroad_permissionprofile": {
+          "entitySetName": "cproroad_permissionprofiles",
+          "logicalName": "cproroad_permissionprofile",
+          "isHidden": false
+        },
+        "cproroad_rbacpermission": {
+          "entitySetName": "cproroad_rbacpermissions",
+          "logicalName": "cproroad_rbacpermission",
+          "isHidden": false
+        },
+        "cproroad_project": {
+          "entitySetName": "cproroad_projects",
+          "logicalName": "cproroad_project",
+          "isHidden": false
+        },
+        "cproroad_workitem": {
+          "entitySetName": "cproroad_workitems",
+          "logicalName": "cproroad_workitem",
+          "isHidden": false
+        },
+        "cproroad_request": {
+          "entitySetName": "cproroad_requests",
+          "logicalName": "cproroad_request",
+          "isHidden": false
+        },
+        "cproroad_evidence": {
+          "entitySetName": "cproroad_evidences",
+          "logicalName": "cproroad_evidence",
+          "isHidden": false
+        },
+        "cproroad_activitylog": {
+          "entitySetName": "cproroad_activitylogs",
+          "logicalName": "cproroad_activitylog",
+          "isHidden": false
+        },
+        "cproroad_risk": {
+          "entitySetName": "cproroad_risks",
+          "logicalName": "cproroad_risk",
+          "isHidden": false
+        },
+        "cproroad_transition": {
+          "entitySetName": "cproroad_transitions",
+          "logicalName": "cproroad_transition",
+          "isHidden": false
+        },
+        "cproroad_rolepermission": {
+          "entitySetName": "cproroad_rolepermissions",
+          "logicalName": "cproroad_rolepermission",
+          "isHidden": false
+        },
+        "cproroad_profilepermission": {
+          "entitySetName": "cproroad_profilepermissions",
+          "logicalName": "cproroad_profilepermission",
+          "isHidden": false
+        },
+        "cproroad_userprofile": {
+          "entitySetName": "cproroad_userprofiles",
+          "logicalName": "cproroad_userprofile",
+          "isHidden": false
+        },
+        "cproroad_userpermissionoverride": {
+          "entitySetName": "cproroad_userpermissionoverrides",
+          "logicalName": "cproroad_userpermissionoverride",
+          "isHidden": false
+        },
+        "cproroad_systemsettings": {
+          "entitySetName": "cproroad_systemsettingses",
+          "logicalName": "cproroad_systemsettings",
+          "isHidden": false
+        },
+        "cproroad_actionrequest": {
+          "entitySetName": "cproroad_actionrequests",
+          "logicalName": "cproroad_actionrequest",
+          "isHidden": false
+        },
+        "cproroad_wipconfig": {
+          "entitySetName": "cproroad_wipconfigs",
+          "logicalName": "cproroad_wipconfig",
+          "isHidden": false
+        },
+        "systemuser": {
+          "entitySetName": "systemusers",
+          "logicalName": "systemuser",
+          "isHidden": true
+        }
+      }
+    }
+  }
 }

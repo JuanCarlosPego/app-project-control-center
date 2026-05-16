@@ -10,7 +10,7 @@
 //   - AuditLog registrado en cada operación
 // ─────────────────────────────────────────────────────────
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState, Component, type ErrorInfo } from "react";
 import {
   GitBranch, Plus, Edit2, Copy, Trash2, RotateCcw,
   AlertTriangle, CheckCircle2, ChevronDown, ChevronUp,
@@ -485,8 +485,50 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   );
 };
 
+// ── Error Boundary ───────────────────────────────────────
+interface EBState { hasError: boolean; message: string; }
+class StateMachineErrorBoundary extends Component<{ children: React.ReactNode }, EBState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, message: "" };
+  }
+  static getDerivedStateFromError(err: unknown): EBState {
+    return { hasError: true, message: err instanceof Error ? err.message : String(err) };
+  }
+  componentDidCatch(err: unknown, info: ErrorInfo) {
+    console.error("[StateMachinePage] render error:", err, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          padding: 40, textAlign: "center",
+          fontFamily: "'Segoe UI', sans-serif", color: "#A4262C",
+        }}>
+          <AlertTriangle size={32} style={{ marginBottom: 12 }} />
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>
+            Error al renderizar la Máquina de Estados
+          </div>
+          <div style={{ fontSize: 12, color: "#605E5C" }}>{this.state.message}</div>
+          <button
+            onClick={() => this.setState({ hasError: false, message: "" })}
+            style={{
+              marginTop: 16, padding: "6px 18px", borderRadius: 5,
+              border: "none", background: "#0078D4", color: "#fff",
+              cursor: "pointer", fontSize: 13, fontWeight: 600,
+            }}
+          >
+            Reintentar
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ── Main page ─────────────────────────────────────────────
-export const StateMachinePage: React.FC = () => {
+const StateMachinePageInner: React.FC = () => {
   const [transitions, setTransitions] = useState<Transition[]>([]);
   const [states,      setStates]      = useState<State[]>([]);
   const [loading, setLoading]         = useState(true);
@@ -919,4 +961,11 @@ const ActionBtn: React.FC<{
   >
     {icon}
   </button>
+);
+
+// ── Export con ErrorBoundary ──────────────────────────────
+export const StateMachinePage: React.FC = () => (
+  <StateMachineErrorBoundary>
+    <StateMachinePageInner />
+  </StateMachineErrorBoundary>
 );

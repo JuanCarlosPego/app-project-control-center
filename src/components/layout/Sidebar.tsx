@@ -7,6 +7,7 @@ import { useEffectiveUser } from "../../auth/ImpersonationContext";
 import { hasRole } from "../../auth/permissions";
 import { useRolePermissions } from "../../auth/usePermission";
 import { TestUserSwitcher } from "./TestUserSwitcher";
+import { getEnv, ENV_COLORS } from "../../services/environment";
 
 // ── Design tokens ──────────────────────────────────────────────────────────
 const T = {
@@ -48,6 +49,9 @@ export const Sidebar: React.FC = () => {
 
   const initials = (effectiveUserObj.displayName ?? realUser.displayName).split(" ")
     .map(n => n[0]).join("").slice(0, 2).toUpperCase();
+
+  const env      = getEnv();
+  const envColor = ENV_COLORS[env];
 
   return (
     <aside
@@ -167,19 +171,42 @@ export const Sidebar: React.FC = () => {
       {/* ── Switcher de usuario de prueba (condicional) ── */}
       {showSwitcher && <TestUserSwitcher collapsed={collapsed} />}
 
-      {/* ── Footer: avatar ── */}
+      {/* ── Footer: avatar + entorno ── */}
       <div style={{ borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10,
                       padding: collapsed ? "12px 0" : "12px 14px",
                       justifyContent: collapsed ? "center" : "flex-start" }}>
-          <Avatar initials={initials} />
+          {/* Avatar con dot de entorno cuando está colapsado */}
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <Avatar initials={initials} />
+            {collapsed && (
+              <span style={{
+                position: "absolute", bottom: -1, right: -1,
+                width: 9, height: 9, borderRadius: "50%",
+                background: envColor.fg,
+                border: `1.5px solid ${T.bg}`,
+              }} />
+            )}
+          </div>
           {!collapsed && (
             <div style={{ overflow: "hidden", flex: 1 }}>
               <div style={{ color: T.text, fontSize: 12, fontWeight: 600,
                             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {effectiveUserObj.displayName}
               </div>
-              <div style={{ color: T.muted, fontSize: 10 }}>{roles[0]}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                <span style={{ color: T.muted, fontSize: 10 }}>{roles[0]}</span>
+                {/* Badge de entorno */}
+                <span style={{
+                  fontSize: 9, fontWeight: 700, letterSpacing: "0.06em",
+                  lineHeight: 1, padding: "2px 5px", borderRadius: 3,
+                  background: envColor.bg, color: envColor.fg,
+                  border: `1px solid ${envColor.fg}44`,
+                  textTransform: "uppercase",
+                }}>
+                  {env}
+                </span>
+              </div>
             </div>
           )}
         </div>

@@ -9,7 +9,7 @@ import React, {
 import { useNavigate } from "react-router-dom";
 import {
   Users, Plus, Search, X, Pencil, UserCheck, UserX,
-  RotateCw, ChevronDown, ShieldCheck, Building2, ArrowRight, Network, Layers,
+  RotateCw, ChevronDown, ShieldCheck, Building2, ArrowRight, Layers,
 } from "lucide-react";
 import type { AppUser, TenantUser, AppRole, Team, TeamType, PermissionProfile } from "../../../types/domain";
 import {

@@ -16,6 +16,7 @@
     "react-router-dom": "^7.15.0"
   },
   "devDependencies": {
+    "@microsoft/power-apps": "^1.1.1",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

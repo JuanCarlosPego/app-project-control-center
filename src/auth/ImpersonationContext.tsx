@@ -18,6 +18,7 @@ import React, {
   useState,
 } from "react";
 import type { AppRole } from "./permissions";
+import { apiClient } from "../services/apiClient";
 
 // ── AppUser (de /api/appusers o db.json) ──────────────────────────
 export interface AppUser {
@@ -66,8 +67,8 @@ export const ImpersonationProvider: React.FC<Props> = ({ realUser, children }) =
   useEffect(() => {
     setLoadingUsers(true);
     Promise.all([
-      fetch("/api/appusers").then(r => r.json()) as Promise<AppUser[]>,
-      fetch("/api/teams").then(r => r.json()).catch(() => []) as Promise<Array<{ id: string; name: string }>>,
+      apiClient.get<AppUser[]>("/app-users"),
+      apiClient.get<Array<{ id: string; name: string }>>("/teams").catch(() => [] as Array<{ id: string; name: string }>),
     ]).then(([users, teams]) => {
         setAppUsers(users);
 
