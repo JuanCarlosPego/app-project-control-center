@@ -15,6 +15,7 @@ import { RoadmapPage } from "./screens/roadmap/RoadmapPage";
 import { GanttPage } from "./screens/gantt/GanttPage";
 import { AdminSettingsPage } from "./screens/admin/AdminSettingsPage";
 import { AdminPermissionsPage } from "./screens/admin/AdminPermissionsPage";
+import { AdminProfilesPage }    from "./screens/admin/profiles/AdminProfilesPage";
 import { StateMachinePage } from "./screens/admin/StateMachinePage";
 import { UsersPage } from "./screens/admin/users/UsersPage";
 import { ProvidersPage } from "./screens/admin/providers/ProvidersPage";
@@ -104,6 +105,7 @@ const App: React.FC = () => (
           <Route path="/admin/teams"       element={<ProtectedRoute requiredRoles={["Admin"]}><AdminTeamsPage /></ProtectedRoute>} />
           <Route path="/admin/settings"      element={<ProtectedRoute requiredRoles={["Admin"]}><AdminSettingsPage /></ProtectedRoute>} />
           <Route path="/admin/permissions"   element={<ProtectedRoute requiredRoles={["Admin"]}><AdminPermissionsPage /></ProtectedRoute>} />
+          <Route path="/admin/profiles"      element={<ProtectedRoute requiredRoles={["Admin"]}><AdminProfilesPage /></ProtectedRoute>} />
           <Route path="/admin/state-machine" element={<ProtectedRoute requiredRoles={["Admin"]}><StateMachinePage /></ProtectedRoute>} />
 
           <Route path="/access-denied" element={<AccessDenied />} />

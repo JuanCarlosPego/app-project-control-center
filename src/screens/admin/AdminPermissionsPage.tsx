@@ -246,6 +246,32 @@ export const AdminPermissionsPage: React.FC = () => {
           "Todos los cambios quedan registrados en el log de Auditoría.",
         ]} />
 
+        {/* Banner: Perfiles de permisos */}
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 12,
+          padding: "12px 16px", marginBottom: 16,
+          background: "#F8F0FF", border: "1px solid #D8B4FE", borderRadius: 8,
+          fontFamily: "'Segoe UI', sans-serif",
+        }}>
+          <div style={{
+            width: 32, height: 32, background: "#EDE0FF", borderRadius: 8,
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>
+            <span style={{ fontSize: 16 }}>🪪</span>
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#7530AF", marginBottom: 3 }}>
+              ¿Necesitas permisos extra para un usuario concreto?
+            </div>
+            <div style={{ fontSize: 12, color: "#605E5C", lineHeight: 1.6 }}>
+              Esta pantalla gestiona la <strong>matriz de permisos por rol</strong>. Si necesitas otorgar
+              permisos adicionales a un usuario específico (ej. que un Usuario pueda crear solicitudes),
+              usa los <strong>Perfiles de permisos</strong>: asígnalos desde{" "}
+              <strong>Administración → Gestión de Usuarios → Editar usuario → Perfiles adicionales</strong>.
+            </div>
+          </div>
+        </div>
+
         {/* Matrix table */}
         <div style={{
           background: "#fff", border: "1px solid #EDEBE9", borderRadius: 10,

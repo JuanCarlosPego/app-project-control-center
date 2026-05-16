@@ -710,11 +710,13 @@
   },
 
   "rbacPermissions": [
-    { "key": "TASK_CREATE",    "label": "Crear tarea",                       "group": "TAREAS" },
-    { "key": "TASK_EDIT",      "label": "Editar tarea",                       "group": "TAREAS" },
-    { "key": "TASK_CLOSE",     "label": "Cerrar tarea (desde EN_VALIDACIÓN)", "group": "TAREAS" },
-    { "key": "TASK_REOPEN",    "label": "Reabrir tarea",                      "group": "TAREAS" },
-    { "key": "TASK_VIEW_ALL",  "label": "Ver todas las tareas",               "group": "TAREAS" },
+    { "key": "TASK_CREATE",      "label": "Crear tarea",                       "group": "TAREAS" },
+    { "key": "TASK_EDIT",        "label": "Editar tarea",                       "group": "TAREAS" },
+    { "key": "TASK_CLOSE",       "label": "Cerrar tarea (desde EN_VALIDACIÓN)", "group": "TAREAS" },
+    { "key": "TASK_REOPEN",      "label": "Reabrir tarea",                      "group": "TAREAS" },
+    { "key": "TASK_VIEW_ALL",    "label": "Ver todas las tareas",               "group": "TAREAS" },
+    { "key": "REQUEST_CREATE",   "label": "Crear solicitudes",                  "group": "TAREAS" },
+    { "key": "REQUEST_APPROVE",  "label": "Aprobar / gestionar solicitudes",    "group": "TAREAS" },
     { "key": "TRANS_NEW_PROG", "label": "PENDIENTE → EN CURSO",               "group": "TRANSICIONES" },
     { "key": "TRANS_PROG_RFT", "label": "EN CURSO → LISTO PRUEBAS",          "group": "TRANSICIONES" },
     { "key": "TRANS_RFT_TEST", "label": "LISTO PRUEBAS → EN VALIDACIÓN",     "group": "TRANSICIONES" },
@@ -737,11 +739,11 @@
   ],
 
   "rolePermissions": {
-    "Admin":        { "TASK_CREATE": true,  "TASK_EDIT": true,  "TASK_CLOSE": true,  "TASK_REOPEN": true,  "TASK_VIEW_ALL": true,  "TRANS_NEW_PROG": true,  "TRANS_PROG_RFT": true,  "TRANS_RFT_TEST": true,  "TRANS_TEST_CLS": true,  "TRANS_BLOCK": true,  "TRANS_UNBLOCK": true,  "VIEW_DASHBOARD": true,  "VIEW_PROJECTS": true,  "VIEW_ROADMAP": true,  "VIEW_GANTT": true,  "VIEW_REQUESTS": true,  "VIEW_BACKLOG": true,  "VIEW_KANBAN": true,  "VIEW_ACTIVITY": true,  "VIEW_EVIDENCES": true,  "VIEW_REPORTS": true,  "VIEW_RISKS": true,  "VIEW_AUDIT": true,  "VIEW_HOME_SMART": true  },
-    "IT AirEuropa": { "TASK_CREATE": true,  "TASK_EDIT": true,  "TASK_CLOSE": true,  "TASK_REOPEN": true,  "TASK_VIEW_ALL": true,  "TRANS_NEW_PROG": true,  "TRANS_PROG_RFT": true,  "TRANS_RFT_TEST": true,  "TRANS_TEST_CLS": true,  "TRANS_BLOCK": true,  "TRANS_UNBLOCK": true,  "VIEW_DASHBOARD": true,  "VIEW_PROJECTS": true,  "VIEW_ROADMAP": true,  "VIEW_GANTT": true,  "VIEW_REQUESTS": true,  "VIEW_BACKLOG": true,  "VIEW_KANBAN": true,  "VIEW_ACTIVITY": true,  "VIEW_EVIDENCES": true,  "VIEW_REPORTS": true,  "VIEW_RISKS": true,  "VIEW_AUDIT": true,  "VIEW_HOME_SMART": true  },
-    "Proveedor":    { "TASK_CREATE": false, "TASK_EDIT": true,  "TASK_CLOSE": false, "TASK_REOPEN": false, "TASK_VIEW_ALL": true,  "TRANS_NEW_PROG": true,  "TRANS_PROG_RFT": true,  "TRANS_RFT_TEST": false, "TRANS_TEST_CLS": false, "TRANS_BLOCK": true,  "TRANS_UNBLOCK": true,  "VIEW_DASHBOARD": true,  "VIEW_PROJECTS": true,  "VIEW_ROADMAP": false, "VIEW_GANTT": false, "VIEW_REQUESTS": true,  "VIEW_BACKLOG": true,  "VIEW_KANBAN": true,  "VIEW_ACTIVITY": true,  "VIEW_EVIDENCES": true,  "VIEW_REPORTS": false, "VIEW_RISKS": false, "VIEW_AUDIT": false, "VIEW_HOME_SMART": true  },
-    "Usuario":      { "TASK_CREATE": false, "TASK_EDIT": false, "TASK_CLOSE": false, "TASK_REOPEN": false, "TASK_VIEW_ALL": true,  "TRANS_NEW_PROG": false, "TRANS_PROG_RFT": false, "TRANS_RFT_TEST": false, "TRANS_TEST_CLS": false, "TRANS_BLOCK": false, "TRANS_UNBLOCK": false, "VIEW_DASHBOARD": true,  "VIEW_PROJECTS": true,  "VIEW_ROADMAP": true,  "VIEW_GANTT": true,  "VIEW_REQUESTS": true,  "VIEW_BACKLOG": true,  "VIEW_KANBAN": true,  "VIEW_ACTIVITY": true,  "VIEW_EVIDENCES": true,  "VIEW_REPORTS": true,  "VIEW_RISKS": false, "VIEW_AUDIT": false, "VIEW_HOME_SMART": true  },
-    "Invitado":     { "TASK_CREATE": false, "TASK_EDIT": false, "TASK_CLOSE": false, "TASK_REOPEN": false, "TASK_VIEW_ALL": false, "TRANS_NEW_PROG": false, "TRANS_PROG_RFT": false, "TRANS_RFT_TEST": false, "TRANS_TEST_CLS": false, "TRANS_BLOCK": false, "TRANS_UNBLOCK": false, "VIEW_DASHBOARD": true,  "VIEW_PROJECTS": true,  "VIEW_ROADMAP": false, "VIEW_GANTT": false, "VIEW_REQUESTS": false, "VIEW_BACKLOG": true,  "VIEW_KANBAN": true,  "VIEW_ACTIVITY": false, "VIEW_EVIDENCES": false, "VIEW_REPORTS": false, "VIEW_RISKS": false, "VIEW_AUDIT": false, "VIEW_HOME_SMART": false }
+    "Admin":        { "TASK_CREATE": true,  "TASK_EDIT": true,  "TASK_CLOSE": true,  "TASK_REOPEN": true,  "TASK_VIEW_ALL": true,  "REQUEST_CREATE": true,  "REQUEST_APPROVE": true,  "TRANS_NEW_PROG": true,  "TRANS_PROG_RFT": true,  "TRANS_RFT_TEST": true,  "TRANS_TEST_CLS": true,  "TRANS_BLOCK": true,  "TRANS_UNBLOCK": true,  "VIEW_DASHBOARD": true,  "VIEW_PROJECTS": true,  "VIEW_ROADMAP": true,  "VIEW_GANTT": true,  "VIEW_REQUESTS": true,  "VIEW_BACKLOG": true,  "VIEW_KANBAN": true,  "VIEW_ACTIVITY": true,  "VIEW_EVIDENCES": true,  "VIEW_REPORTS": true,  "VIEW_RISKS": true,  "VIEW_AUDIT": true,  "VIEW_HOME_SMART": true  },
+    "IT AirEuropa": { "TASK_CREATE": true,  "TASK_EDIT": true,  "TASK_CLOSE": true,  "TASK_REOPEN": true,  "TASK_VIEW_ALL": true,  "REQUEST_CREATE": true,  "REQUEST_APPROVE": true,  "TRANS_NEW_PROG": true,  "TRANS_PROG_RFT": true,  "TRANS_RFT_TEST": true,  "TRANS_TEST_CLS": true,  "TRANS_BLOCK": true,  "TRANS_UNBLOCK": true,  "VIEW_DASHBOARD": true,  "VIEW_PROJECTS": true,  "VIEW_ROADMAP": true,  "VIEW_GANTT": true,  "VIEW_REQUESTS": true,  "VIEW_BACKLOG": true,  "VIEW_KANBAN": true,  "VIEW_ACTIVITY": true,  "VIEW_EVIDENCES": true,  "VIEW_REPORTS": true,  "VIEW_RISKS": true,  "VIEW_AUDIT": true,  "VIEW_HOME_SMART": true  },
+    "Proveedor":    { "TASK_CREATE": false, "TASK_EDIT": true,  "TASK_CLOSE": false, "TASK_REOPEN": false, "TASK_VIEW_ALL": true,  "REQUEST_CREATE": false, "REQUEST_APPROVE": false, "TRANS_NEW_PROG": true,  "TRANS_PROG_RFT": true,  "TRANS_RFT_TEST": false, "TRANS_TEST_CLS": false, "TRANS_BLOCK": true,  "TRANS_UNBLOCK": true,  "VIEW_DASHBOARD": true,  "VIEW_PROJECTS": true,  "VIEW_ROADMAP": false, "VIEW_GANTT": false, "VIEW_REQUESTS": true,  "VIEW_BACKLOG": true,  "VIEW_KANBAN": true,  "VIEW_ACTIVITY": true,  "VIEW_EVIDENCES": true,  "VIEW_REPORTS": false, "VIEW_RISKS": false, "VIEW_AUDIT": false, "VIEW_HOME_SMART": true  },
+    "Usuario":      { "TASK_CREATE": false, "TASK_EDIT": false, "TASK_CLOSE": false, "TASK_REOPEN": false, "TASK_VIEW_ALL": true,  "REQUEST_CREATE": false, "REQUEST_APPROVE": false, "TRANS_NEW_PROG": false, "TRANS_PROG_RFT": false, "TRANS_RFT_TEST": false, "TRANS_TEST_CLS": false, "TRANS_BLOCK": false, "TRANS_UNBLOCK": false, "VIEW_DASHBOARD": true,  "VIEW_PROJECTS": true,  "VIEW_ROADMAP": true,  "VIEW_GANTT": true,  "VIEW_REQUESTS": true,  "VIEW_BACKLOG": true,  "VIEW_KANBAN": true,  "VIEW_ACTIVITY": true,  "VIEW_EVIDENCES": true,  "VIEW_REPORTS": true,  "VIEW_RISKS": false, "VIEW_AUDIT": false, "VIEW_HOME_SMART": true  },
+    "Invitado":     { "TASK_CREATE": false, "TASK_EDIT": false, "TASK_CLOSE": false, "TASK_REOPEN": false, "TASK_VIEW_ALL": false, "REQUEST_CREATE": false, "REQUEST_APPROVE": false, "TRANS_NEW_PROG": false, "TRANS_PROG_RFT": false, "TRANS_RFT_TEST": false, "TRANS_TEST_CLS": false, "TRANS_BLOCK": false, "TRANS_UNBLOCK": false, "VIEW_DASHBOARD": true,  "VIEW_PROJECTS": true,  "VIEW_ROADMAP": false, "VIEW_GANTT": false, "VIEW_REQUESTS": false, "VIEW_BACKLOG": true,  "VIEW_KANBAN": true,  "VIEW_ACTIVITY": false, "VIEW_EVIDENCES": false, "VIEW_REPORTS": false, "VIEW_RISKS": false, "VIEW_AUDIT": false, "VIEW_HOME_SMART": false }
   },
 
   "auditLog": [
@@ -762,7 +764,7 @@
     { "id": "au-001", "displayName": "Admin IT",         "email": "admin@aireuropa.com",        "upn": "admin@aireuropa.com",        "role": "Admin",        "teamIds": ["team-it"],                         "isActive": true,  "createdOn": "2026-01-01T00:00:00Z", "updatedOn": "2026-01-01T00:00:00Z" },
     { "id": "au-002", "displayName": "Juan Carlos Pego", "email": "jc.pego@aireuropa.com",      "upn": "jc.pego@aireuropa.com",      "role": "IT AirEuropa", "teamIds": ["team-it"],                         "isActive": true,  "createdOn": "2026-01-10T00:00:00Z", "updatedOn": "2026-01-10T00:00:00Z" },
     { "id": "au-003", "displayName": "María López",      "email": "m.lopez@aireuropa.com",      "upn": "m.lopez@aireuropa.com",      "role": "IT AirEuropa", "teamIds": ["team-it"],                         "isActive": true,  "createdOn": "2026-01-15T00:00:00Z", "updatedOn": "2026-02-01T00:00:00Z" },
-    { "id": "au-004", "displayName": "Carlos Vega",      "email": "c.vega@aireuropa.com",       "upn": "c.vega@aireuropa.com",       "role": "Usuario",      "teamIds": ["team-dirops", "team-catering"],    "isActive": true,  "createdOn": "2026-02-01T00:00:00Z", "updatedOn": "2026-02-01T00:00:00Z" },
+    { "id": "au-004", "displayName": "Carlos Vega",      "email": "c.vega@aireuropa.com",       "upn": "c.vega@aireuropa.com",       "role": "Usuario",      "teamIds": ["team-dirops", "team-catering"],    "profileIds": ["pp-po"], "isActive": true,  "createdOn": "2026-02-01T00:00:00Z", "updatedOn": "2026-02-01T00:00:00Z" },
     { "id": "au-005", "displayName": "Ana Romero",       "email": "a.romero@aireuropa.com",     "upn": "a.romero@aireuropa.com",     "role": "Usuario",      "teamIds": ["team-dirprod"],                    "isActive": false, "createdOn": "2026-02-10T00:00:00Z", "updatedOn": "2026-04-01T00:00:00Z" },
     { "id": "au-006", "displayName": "Dev 40West",       "email": "dev@40west.com",             "upn": "dev@40west.com",             "role": "Proveedor",    "teamIds": ["team-40west"],                     "isActive": true,  "createdOn": "2026-02-15T00:00:00Z", "updatedOn": "2026-02-15T00:00:00Z" },
     { "id": "au-007", "displayName": "Dev SkyTech",      "email": "dev@skytech.com",            "upn": "dev@skytech.com",            "role": "Proveedor",    "teamIds": ["team-skytech"],                    "isActive": true,  "createdOn": "2026-03-01T00:00:00Z", "updatedOn": "2026-03-01T00:00:00Z" },
@@ -944,5 +946,44 @@
       "updatedOn": "2026-05-13T08:15:00Z",
       "convertedWorkItemId": "wi-dirops-023"
     }
-  ]
+  ],
+
+  "permissionProfiles": [
+    {
+      "id": "pp-po",
+      "name": "PO",
+      "label": "Product Owner",
+      "description": "Permite crear y gestionar solicitudes de producto. Asignable a usuarios con rol Usuario que actúan como Product Owners.",
+      "isActive": true,
+      "createdOn": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": "pp-keyuser",
+      "name": "KeyUser",
+      "label": "Key User",
+      "description": "Usuario clave de área con acceso a informes de su ámbito.",
+      "isActive": true,
+      "createdOn": "2026-01-01T00:00:00Z"
+    }
+  ],
+
+  "profilePermissions": [
+    { "id": "pperm-po-1",  "profileId": "pp-po",      "permissionKey": "VIEW_REQUESTS"   },
+    { "id": "pperm-po-2",  "profileId": "pp-po",      "permissionKey": "REQUEST_CREATE"  },
+    { "id": "pperm-po-3",  "profileId": "pp-po",      "permissionKey": "REQUEST_APPROVE" },
+    { "id": "pperm-ku-1",  "profileId": "pp-keyuser", "permissionKey": "VIEW_REPORTS"    },
+    { "id": "pperm-ku-2",  "profileId": "pp-keyuser", "permissionKey": "VIEW_RISKS"      }
+  ],
+
+  "userProfiles": [
+    {
+      "id": "up-001",
+      "userId": "au-004",
+      "profileId": "pp-po",
+      "assignedBy": "au-001",
+      "assignedOn": "2026-02-01T10:00:00Z"
+    }
+  ],
+
+  "userPermissionOverrides": []
 }

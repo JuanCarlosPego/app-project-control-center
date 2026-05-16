@@ -1,49 +1,75 @@
 // ─────────────────────────────────────────────────────────
 //  src/auth/usePermission.ts
-//  Hook para comprobar un permiso RBAC dinámico en cliente.
+//  Gestión de permisos efectivos en cliente.
 //
-//  Carga /admin/role-permissions una sola vez por sesión
-//  (caché a nivel de módulo). No hay peticiones repetidas
-//  aunque el hook se monte en múltiples componentes.
+//  Arquitectura:
+//    GET /api/users/:userId/effective-permissions
+//    → resuelve: Admin bypass | rol base | perfiles | overrides
+//    → retorna { permissions, fromProfiles, overrides }
+//
+//  La caché es por userId. Al cambiar de usuario (impersonación),
+//  la caché del anterior se mantiene y la del nuevo se carga fresh.
+//  invalidatePermissionCache() borra todas las entradas y notifica.
 //
 //  Uso:
-//    const { allowed, loading } = usePermission("VIEW_REPORTS");
+//    const { allowed, loading } = usePermission("REQUEST_CREATE");
+//    const { permissions }      = useRolePermissions();
+//    const perms                = useEffectivePermissions(); // objeto completo
 // ─────────────────────────────────────────────────────────
 import { useEffect, useState } from "react";
-import { getRolePermissions } from "../services/adminService";
+import { getEffectivePermissions } from "../services/profileService";
 import { useEffectiveUser } from "./ImpersonationContext";
+import type { AppRole, EffectivePermissions } from "../types/domain";
 
-// ── Caché de módulo ───────────────────────────────────────
-let _cache: Record<string, Record<string, boolean>> | null = null;
-let _pending: Promise<Record<string, Record<string, boolean>>> | null = null;
+// ── Caché por userId ──────────────────────────────────────
+const _cache   = new Map<string, EffectivePermissions>();
+const _pending = new Map<string, Promise<EffectivePermissions>>();
 
-// Contador de versión: se incrementa con cada invalidación para
-// forzar el re-render de los hooks que dependen de él.
 let _version = 0;
 const _listeners = new Set<() => void>();
 
-async function loadRolePermissions(): Promise<Record<string, Record<string, boolean>>> {
-  if (_cache) return _cache;
-  if (!_pending) {
-    _pending = getRolePermissions().then((data) => {
-      _cache = data.rolePermissions as Record<string, Record<string, boolean>>;
-      return _cache;
+async function loadEffectivePerms(userId: string): Promise<EffectivePermissions> {
+  const cached = _cache.get(userId);
+  if (cached) return cached;
+
+  let pending = _pending.get(userId);
+  if (!pending) {
+    pending = getEffectivePermissions(userId).then((data) => {
+      _cache.set(userId, data);
+      _pending.delete(userId);
+      return data;
     });
+    _pending.set(userId, pending);
   }
-  return _pending;
+  return pending;
 }
 
-/** Invalida la caché y notifica a los hooks suscritos para que recarguen. */
+/** Invalida toda la caché de permisos efectivos y notifica a los hooks. */
 export function invalidatePermissionCache(): void {
-  _cache   = null;
-  _pending = null;
+  _cache.clear();
+  _pending.clear();
   _version += 1;
   _listeners.forEach((fn) => fn());
 }
 
+// ── Función pura hasPermission ────────────────────────────
+/**
+ * Comprueba si el usuario tiene un permiso específico.
+ * Prioridad: Admin bypass → efectivo pre-resuelto.
+ * Solo para uso fuera de hooks (servicios, validaciones).
+ */
+export function hasPermission(
+  effectivePermissions: Record<string, boolean>,
+  key: string,
+  userRole?: AppRole,
+): boolean {
+  if (userRole === "Admin") return true;
+  return effectivePermissions[key] ?? false;
+}
+
 // ── Hook principal ────────────────────────────────────────
 export interface UsePermissionResult {
-  /** true si el usuario efectivo tiene el permiso. */
+  /** true si el usuario efectivo tiene el permiso (resuelto con perfil + overrides). */
   allowed: boolean;
   /** true mientras carga la primera vez. */
   loading: boolean;
@@ -54,7 +80,6 @@ export function usePermission(permissionKey: string): UsePermissionResult {
   const [state, setState] = useState<UsePermissionResult>({ allowed: false, loading: true });
   const [, setVer] = useState(_version);
 
-  // Suscribirse a invalidaciones de caché
   useEffect(() => {
     const notify = () => setVer((v) => v + 1);
     _listeners.add(notify);
@@ -62,14 +87,13 @@ export function usePermission(permissionKey: string): UsePermissionResult {
   }, []);
 
   useEffect(() => {
+    if (!user?.id) { setState({ allowed: false, loading: false }); return; }
     let cancelled = false;
 
-    loadRolePermissions()
-      .then((perm) => {
+    loadEffectivePerms(user.id)
+      .then((ep) => {
         if (cancelled) return;
-        const role = user?.role ?? "";
-        const allowed = perm[role]?.[permissionKey] ?? false;
-        setState({ allowed, loading: false });
+        setState({ allowed: ep.permissions[permissionKey] ?? false, loading: false });
       })
       .catch(() => {
         if (!cancelled) setState({ allowed: false, loading: false });
@@ -77,14 +101,14 @@ export function usePermission(permissionKey: string): UsePermissionResult {
 
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [permissionKey, user?.role, _version]);
+  }, [permissionKey, user?.id, _version]);
 
   return state;
 }
 
 // ── Hook bulk: todos los permisos del usuario efectivo ────
 export interface UseRolePermissionsResult {
-  /** Mapa clave→boolean para el rol del usuario efectivo. */
+  /** Mapa clave→boolean (resuelto: rol + perfiles + overrides). */
   permissions: Record<string, boolean>;
   loading: boolean;
 }
@@ -94,7 +118,6 @@ export function useRolePermissions(): UseRolePermissionsResult {
   const [state, setState] = useState<UseRolePermissionsResult>({ permissions: {}, loading: true });
   const [, setVer] = useState(_version);
 
-  // Suscribirse a invalidaciones de caché
   useEffect(() => {
     const notify = () => setVer((v) => v + 1);
     _listeners.add(notify);
@@ -102,19 +125,58 @@ export function useRolePermissions(): UseRolePermissionsResult {
   }, []);
 
   useEffect(() => {
+    if (!user?.id) { setState({ permissions: {}, loading: false }); return; }
     let cancelled = false;
-    loadRolePermissions()
-      .then((perm) => {
+
+    loadEffectivePerms(user.id)
+      .then((ep) => {
         if (cancelled) return;
-        const role = user?.role ?? "";
-        setState({ permissions: perm[role] ?? {}, loading: false });
+        setState({ permissions: ep.permissions, loading: false });
       })
       .catch(() => {
         if (!cancelled) setState({ permissions: {}, loading: false });
       });
+
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.role, _version]);
+  }, [user?.id, _version]);
+
+  return state;
+}
+
+// ── Hook completo: objeto EffectivePermissions ────────────
+export interface UseEffectivePermissionsResult {
+  effectivePerms: EffectivePermissions | null;
+  loading: boolean;
+}
+
+export function useEffectivePermissions(): UseEffectivePermissionsResult {
+  const { user } = useEffectiveUser();
+  const [state, setState] = useState<UseEffectivePermissionsResult>({ effectivePerms: null, loading: true });
+  const [, setVer] = useState(_version);
+
+  useEffect(() => {
+    const notify = () => setVer((v) => v + 1);
+    _listeners.add(notify);
+    return () => { _listeners.delete(notify); };
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) { setState({ effectivePerms: null, loading: false }); return; }
+    let cancelled = false;
+
+    loadEffectivePerms(user.id)
+      .then((ep) => {
+        if (cancelled) return;
+        setState({ effectivePerms: ep, loading: false });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ effectivePerms: null, loading: false });
+      });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, _version]);
 
   return state;
 }

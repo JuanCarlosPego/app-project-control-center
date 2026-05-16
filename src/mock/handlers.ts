@@ -2418,4 +2418,271 @@ export const handlers = [
     (store.requests as typeof store.requests)[idx] = updated as typeof store.requests[0];
     return ok(updated);
   }),
+
+  // ══════════════════════════════════════════════════════
+  //  PERMISSION PROFILES
+  // ══════════════════════════════════════════════════════
+
+  // ── GET /api/permission-profiles ─────────────────────
+  http.get("/api/permission-profiles", () => {
+    if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin");
+    return ok(store.permissionProfiles ?? []);
+  }),
+
+  // ── POST /api/permission-profiles ────────────────────
+  http.post("/api/permission-profiles", async ({ request }) => {
+    if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin");
+    const body = await request.json() as { name?: string; label?: string; description?: string };
+    if (!body.name?.trim() || !body.label?.trim()) return err(400, "name y label son obligatorios");
+    const profiles = (store.permissionProfiles ?? []) as Array<Record<string, unknown>>;
+    const dup = profiles.find((p) => (p.name as string).toLowerCase() === body.name!.toLowerCase());
+    if (dup) return err(409, `Ya existe un perfil con el nombre '${body.name}'`);
+    const profile = {
+      id:          genId("pp"),
+      name:        body.name!.trim(),
+      label:       body.label!.trim(),
+      description: body.description?.trim() ?? "",
+      isActive:    true,
+      createdOn:   new Date().toISOString(),
+    };
+    profiles.push(profile);
+    return HttpResponse.json(profile, { status: 201 });
+  }),
+
+  // ── PATCH /api/permission-profiles/:id ───────────────
+  http.patch("/api/permission-profiles/:id", async ({ params, request }) => {
+    if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin");
+    const profiles = (store.permissionProfiles ?? []) as Array<Record<string, unknown>>;
+    const idx = profiles.findIndex((p) => p.id === params.id);
+    if (idx === -1) return err(404, "Perfil no encontrado");
+    const body = await request.json() as Partial<{ name: string; label: string; description: string; isActive: boolean }>;
+    Object.assign(profiles[idx], body);
+    return ok(profiles[idx]);
+  }),
+
+  // ── GET /api/profile-permissions ─────────────────────
+  http.get("/api/profile-permissions", () => {
+    if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin");
+    return ok(store.profilePermissions ?? []);
+  }),
+
+  // ── POST /api/profile-permissions ────────────────────
+  http.post("/api/profile-permissions", async ({ request }) => {
+    if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin");
+    const body = await request.json() as { profileId?: string; permissionKey?: string };
+    if (!body.profileId || !body.permissionKey) return err(400, "profileId y permissionKey son obligatorios");
+    const entries = (store.profilePermissions ?? []) as Array<Record<string, unknown>>;
+    const dup = entries.find((e) => e.profileId === body.profileId && e.permissionKey === body.permissionKey);
+    if (dup) return err(409, "Ese permiso ya está en el perfil");
+    const entry = { id: genId("pperm"), profileId: body.profileId, permissionKey: body.permissionKey };
+    entries.push(entry);
+    return HttpResponse.json(entry, { status: 201 });
+  }),
+
+  // ── DELETE /api/profile-permissions/:id ──────────────
+  http.delete("/api/profile-permissions/:id", ({ params }) => {
+    if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin");
+    const entries = (store.profilePermissions ?? []) as Array<Record<string, unknown>>;
+    const idx = entries.findIndex((e) => e.id === params.id);
+    if (idx === -1) return err(404, "Entrada no encontrada");
+    entries.splice(idx, 1);
+    return ok({ ok: true });
+  }),
+
+  // ══════════════════════════════════════════════════════
+  //  USER PROFILES & OVERRIDES
+  // ══════════════════════════════════════════════════════
+
+  // ── GET /api/users/:userId/effective-permissions ──────
+  // Resuelve el mapa completo de permisos para un usuario:
+  //   1) Admin → todo true
+  //   2) Base rol
+  //   3) Perfiles asignados (aditivos)
+  //   4) Overrides por usuario (Admin puede elevar/revocar)
+  http.get("/api/users/:userId/effective-permissions", ({ params }) => {
+    const userId = params.userId as string;
+    const users  = store.appUsers as Array<Record<string, unknown>>;
+    const user   = users.find((u) => u.id === userId);
+    if (!user) return err(404, "Usuario no encontrado");
+
+    const role       = user.role as string;
+    const allKeys    = (store.rbacPermissions as Array<{ key: string }>).map((p) => p.key);
+
+    // 1. Admin bypass — todo true
+    if (role === "Admin") {
+      const perms = Object.fromEntries(allKeys.map((k) => [k, true]));
+      return ok({ permissions: perms, fromProfiles: [], overrides: {} });
+    }
+
+    // 2. Base por rol
+    const roleMap = store.rolePermissions as Record<string, Record<string, boolean>>;
+    const perms   = { ...(roleMap[role] ?? {}) };
+    // Asegurar que todas las claves existen (puede haber claves nuevas no en el mapa antiguo)
+    for (const k of allKeys) { if (!(k in perms)) perms[k] = false; }
+
+    // 3. Perfiles del usuario (aditivos — nunca revocan)
+    const fromProfiles: string[] = [];
+    const userProfileEntries = (store.userProfiles ?? []) as Array<Record<string, unknown>>;
+    const profilePermEntries = (store.profilePermissions ?? []) as Array<Record<string, unknown>>;
+    const allProfiles        = (store.permissionProfiles ?? []) as Array<Record<string, unknown>>;
+
+    for (const up of userProfileEntries.filter((e) => e.userId === userId)) {
+      const profile = allProfiles.find((p) => p.id === up.profileId && p.isActive);
+      if (!profile) continue;
+      for (const pp of profilePermEntries.filter((pp) => pp.profileId === up.profileId)) {
+        const key = pp.permissionKey as string;
+        if (!perms[key]) {
+          perms[key] = true;
+          fromProfiles.push(key);
+        }
+      }
+    }
+
+    // 4. Overrides por usuario (pueden elevar O revocar)
+    const overrides: Record<string, boolean> = {};
+    for (const ov of ((store.userPermissionOverrides ?? []) as Array<Record<string, unknown>>)
+      .filter((o) => o.userId === userId)) {
+      const key = ov.permissionKey as string;
+      const val = ov.value as boolean;
+      perms[key]   = val;
+      overrides[key] = val;
+    }
+
+    return ok({ permissions: perms, fromProfiles, overrides });
+  }),
+
+  // ── GET /api/users/:userId/profiles ──────────────────
+  http.get("/api/users/:userId/profiles", ({ params }) => {
+    if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin");
+    const entries = (store.userProfiles ?? []) as Array<Record<string, unknown>>;
+    return ok(entries.filter((e) => e.userId === params.userId));
+  }),
+
+  // ── POST /api/users/:userId/profiles ─────────────────
+  http.post("/api/users/:userId/profiles", async ({ params, request }) => {
+    if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin");
+    const body = await request.json() as { profileId?: string };
+    if (!body.profileId) return err(400, "profileId es obligatorio");
+    const entries = (store.userProfiles ?? []) as Array<Record<string, unknown>>;
+    const dup = entries.find((e) => e.userId === params.userId && e.profileId === body.profileId);
+    if (dup) return err(409, "El usuario ya tiene ese perfil asignado");
+    const entry = {
+      id:         genId("up"),
+      userId:     params.userId,
+      profileId:  body.profileId,
+      assignedBy: store.currentUser.id,
+      assignedOn: new Date().toISOString(),
+    };
+    entries.push(entry);
+    // Sincronizar profileIds en appUsers
+    const users = store.appUsers as Array<Record<string, unknown>>;
+    const uIdx = users.findIndex((u) => u.id === params.userId);
+    if (uIdx >= 0) {
+      const existing = (users[uIdx].profileIds ?? []) as string[];
+      if (!existing.includes(body.profileId)) {
+        users[uIdx].profileIds = [...existing, body.profileId];
+        users[uIdx].updatedOn  = new Date().toISOString();
+      }
+    }
+    // Auditoría
+    (store.auditLog as unknown[]).push({
+      id: genId("audit"), category: "PROFILE",
+      action: "PROFILE_ASSIGNED",
+      who: store.currentUser.id, whoRole: store.currentUser.roles[0],
+      at: new Date().toISOString(),
+      before: {}, after: { userId: params.userId, profileId: body.profileId },
+      description: `Perfil '${body.profileId}' asignado a usuario '${params.userId}'`,
+    });
+    return HttpResponse.json(entry, { status: 201 });
+  }),
+
+  // ── DELETE /api/users/:userId/profiles/:profileId ─────
+  http.delete("/api/users/:userId/profiles/:profileId", ({ params }) => {
+    if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin");
+    const entries = (store.userProfiles ?? []) as Array<Record<string, unknown>>;
+    const idx = entries.findIndex((e) => e.userId === params.userId && e.profileId === params.profileId);
+    if (idx === -1) return err(404, "Asignación no encontrada");
+    entries.splice(idx, 1);
+    // Sincronizar profileIds en appUsers
+    const users = store.appUsers as Array<Record<string, unknown>>;
+    const uIdx = users.findIndex((u) => u.id === params.userId);
+    if (uIdx >= 0) {
+      users[uIdx].profileIds = ((users[uIdx].profileIds ?? []) as string[]).filter((id) => id !== params.profileId);
+      users[uIdx].updatedOn  = new Date().toISOString();
+    }
+    // Auditoría
+    (store.auditLog as unknown[]).push({
+      id: genId("audit"), category: "PROFILE",
+      action: "PROFILE_REMOVED",
+      who: store.currentUser.id, whoRole: store.currentUser.roles[0],
+      at: new Date().toISOString(),
+      before: { userId: params.userId, profileId: params.profileId }, after: {},
+      description: `Perfil '${params.profileId}' retirado de usuario '${params.userId}'`,
+    });
+    return ok({ ok: true });
+  }),
+
+  // ── GET /api/users/:userId/overrides ──────────────────
+  http.get("/api/users/:userId/overrides", ({ params }) => {
+    if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin");
+    const entries = (store.userPermissionOverrides ?? []) as Array<Record<string, unknown>>;
+    return ok(entries.filter((e) => e.userId === params.userId));
+  }),
+
+  // ── POST /api/users/:userId/overrides ─────────────────
+  http.post("/api/users/:userId/overrides", async ({ params, request }) => {
+    if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin puede establecer overrides");
+    const body = await request.json() as { permissionKey?: string; value?: boolean; reason?: string };
+    if (!body.permissionKey || body.value === undefined || !body.reason?.trim())
+      return err(400, "permissionKey, value y reason son obligatorios");
+    const entries = (store.userPermissionOverrides ?? []) as Array<Record<string, unknown>>;
+    // Upsert: si ya existe, actualizar
+    const existing = entries.find((e) => e.userId === params.userId && e.permissionKey === body.permissionKey);
+    if (existing) {
+      existing.value     = body.value;
+      existing.reason    = body.reason!.trim();
+      existing.createdBy = store.currentUser.id;
+      existing.createdOn = new Date().toISOString();
+      return ok(existing);
+    }
+    const entry = {
+      id:            genId("upo"),
+      userId:        params.userId,
+      permissionKey: body.permissionKey,
+      value:         body.value,
+      reason:        body.reason!.trim(),
+      createdBy:     store.currentUser.id,
+      createdOn:     new Date().toISOString(),
+    };
+    entries.push(entry);
+    // Auditoría
+    (store.auditLog as unknown[]).push({
+      id: genId("audit"), category: "OVERRIDE",
+      action: "PERMISSION_OVERRIDE_SET",
+      who: store.currentUser.id, whoRole: store.currentUser.roles[0],
+      at: new Date().toISOString(),
+      before: {}, after: { userId: params.userId, key: body.permissionKey, value: body.value },
+      description: `Override: '${body.permissionKey}' → ${body.value} para usuario '${params.userId}'. Razón: ${body.reason}`,
+    });
+    return HttpResponse.json(entry, { status: 201 });
+  }),
+
+  // ── DELETE /api/users/:userId/overrides/:id ───────────
+  http.delete("/api/users/:userId/overrides/:id", ({ params }) => {
+    if (!currentUserHasRole(["Admin"])) return err(403, "Solo Admin");
+    const entries = (store.userPermissionOverrides ?? []) as Array<Record<string, unknown>>;
+    const idx = entries.findIndex((e) => e.id === params.id && e.userId === params.userId);
+    if (idx === -1) return err(404, "Override no encontrado");
+    const removed = entries[idx];
+    entries.splice(idx, 1);
+    (store.auditLog as unknown[]).push({
+      id: genId("audit"), category: "OVERRIDE",
+      action: "PERMISSION_OVERRIDE_REMOVED",
+      who: store.currentUser.id, whoRole: store.currentUser.roles[0],
+      at: new Date().toISOString(),
+      before: removed as Record<string, unknown>, after: {},
+      description: `Override '${removed.permissionKey}' eliminado para usuario '${params.userId}'`,
+    });
+    return ok({ ok: true });
+  }),
 ];

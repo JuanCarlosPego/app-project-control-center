@@ -538,13 +538,12 @@ const PersonalKPICard: React.FC<{
     onClick={onClick}
     style={{
       flex: "1 1 160px", minWidth: 140,
-      display: "flex", alignItems: "center", gap: 12,
+      display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 12,
       padding: "12px 16px", borderRadius: 8,
       border: `1px solid ${borderColor}`, background: bg,
       cursor: "pointer", textAlign: "left",
       fontFamily: "'Segoe UI', sans-serif",
       transition: "filter 120ms",
-      flexDirection: "column", alignItems: "flex-start",
     }}
     onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.filter = "brightness(0.94)"; }}
     onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.filter = "brightness(1)"; }}

@@ -478,7 +478,7 @@ export const ProvidersPage: React.FC = () => {
                 </div>
 
                 {/* ID */}
-                <div style={{ fontSize: 11, color: "#A19F9D", fontFamily: F, fontFamily: "'Cascadia Code', monospace" }}>
+                <div style={{ fontSize: 11, color: "#A19F9D", fontFamily: "'Cascadia Code', monospace" }}>
                   {p.id}
                 </div>
 

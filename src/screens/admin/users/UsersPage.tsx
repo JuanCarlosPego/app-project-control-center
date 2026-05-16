@@ -9,14 +9,19 @@ import React, {
 import { useNavigate } from "react-router-dom";
 import {
   Users, Plus, Search, X, Pencil, UserCheck, UserX,
-  RotateCw, ChevronDown, ShieldCheck, Building2, ArrowRight, Network,
+  RotateCw, ChevronDown, ShieldCheck, Building2, ArrowRight, Network, Layers,
 } from "lucide-react";
-import type { AppUser, TenantUser, AppRole, Team, TeamType } from "../../../types/domain";
+import type { AppUser, TenantUser, AppRole, Team, TeamType, PermissionProfile } from "../../../types/domain";
 import {
   getAppUsers, createAppUser, updateAppUser,
   activateAppUser, deactivateAppUser, searchTenantUsers,
 } from "../../../services/userManagementService";
 import { listTeams } from "../../../services/teamService";
+import {
+  getPermissionProfiles,
+  assignProfileToUser, removeProfileFromUser,
+} from "../../../services/profileService";
+import { invalidatePermissionCache } from "../../../auth/usePermission";
 import { UserAvatar } from "../../../components/ui/UserAvatar";
 import {
   AdminToastContainer, newAdminToast, type ToastMsg,
@@ -424,6 +429,46 @@ const PeoplePicker: React.FC<{
   );
 };
 
+// ── ProfileMultiSelect: chips de perfiles adicionales ─────
+const ProfileMultiSelect: React.FC<{
+  profiles: PermissionProfile[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}> = ({ profiles, selected, onChange }) => {
+  const active = profiles.filter((p) => p.isActive);
+  if (active.length === 0) return (
+    <div style={{ fontSize: 12, color: "#A19F9D", fontFamily: F }}>No hay perfiles disponibles.</div>
+  );
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {active.map((p) => {
+        const on = selected.includes(p.id);
+        return (
+          <button
+            key={p.id}
+            type="button"
+            title={p.description}
+            onClick={() => onChange(on ? selected.filter((x) => x !== p.id) : [...selected, p.id])}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "5px 12px", borderRadius: 20,
+              fontSize: 12, fontWeight: on ? 700 : 400,
+              border: `1px solid ${on ? "#7530AF" : "#EDEBE9"}`,
+              background: on ? "#F8F0FF" : "#fff",
+              color: on ? "#7530AF" : "#605E5C",
+              cursor: "pointer", fontFamily: F, transition: "all 120ms",
+            }}
+          >
+            <Layers size={11} />
+            {p.label} ({p.name})
+            {on && <span style={{ fontSize: 10, color: "#7530AF", marginLeft: 2 }}>✓</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
 // ── Drawer: Añadir / Editar usuario ──────────────────────
 type DrawerMode = "add" | "edit";
 
@@ -437,16 +482,18 @@ const UserDrawer: React.FC<{
   state: DrawerState;
   existingUpns: string[];
   teams: Team[];
+  profiles: PermissionProfile[];
   onClose: () => void;
   onSaved: (u: AppUser) => void;
   addToast: (t: string, ok?: boolean) => void;
-}> = ({ state, existingUpns, teams, onClose, onSaved, addToast }) => {
+}> = ({ state, existingUpns, teams, profiles, onClose, onSaved, addToast }) => {
   const { open, mode, user } = state;
 
   // Form state
   const [selected,   setSelected]   = useState<TenantUser | null>(null);
   const [role,       setRole]       = useState<AppRole>("Usuario");
   const [teamIds,    setTeamIds]    = useState<string[]>([]);
+  const [profileIds, setProfileIds] = useState<string[]>([]);
   const [isActive,   setIsActive]   = useState(true);
   const [saving,     setSaving]     = useState(false);
   const [dupWarning, setDupWarning] = useState(false);
@@ -459,12 +506,14 @@ const UserDrawer: React.FC<{
       setSelected({ upn: user.upn, displayName: user.displayName, email: user.email });
       setRole(user.role);
       setTeamIds(user.teamIds ?? []);
+      setProfileIds(user.profileIds ?? []);
       setIsActive(user.isActive);
       setDupWarning(false);
     } else {
       setSelected(null);
       setRole("Usuario");
       setTeamIds([]);
+      setProfileIds([]);
       setIsActive(true);
       setDupWarning(false);
     }
@@ -503,6 +552,11 @@ const UserDrawer: React.FC<{
           role,
           teamIds,
         });
+        // Asignar perfiles al nuevo usuario
+        for (const pid of profileIds) {
+          await assignProfileToUser(saved.id, pid);
+        }
+        if (profileIds.length > 0) invalidatePermissionCache();
         addToast(`Usuario '${saved.displayName}' añadido.`);
       } else {
         saved = await updateAppUser(user!.id, {
@@ -510,6 +564,13 @@ const UserDrawer: React.FC<{
           isActive,
           teamIds,
         });
+        // Sincronizar perfiles: diff entre los anteriores y los nuevos
+        const prevIds = user!.profileIds ?? [];
+        const toAdd    = profileIds.filter((id) => !prevIds.includes(id));
+        const toRemove = prevIds.filter((id) => !profileIds.includes(id));
+        for (const pid of toAdd)    await assignProfileToUser(saved.id, pid);
+        for (const pid of toRemove) await removeProfileFromUser(saved.id, pid);
+        if (toAdd.length > 0 || toRemove.length > 0) invalidatePermissionCache();
         addToast(`Usuario '${saved.displayName}' actualizado.`);
       }
       onSaved(saved);
@@ -704,6 +765,43 @@ const UserDrawer: React.FC<{
             </div>
           )}
 
+          {/* ── Perfiles adicionales (Admin only) ─────────── */}
+          <div style={{
+            padding: "14px 16px",
+            background: "#F8F0FF",
+            border: "1px solid #D8B4FE",
+            borderRadius: 8,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+              <Layers size={14} color="#7530AF" />
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#7530AF", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: F }}>
+                Perfiles adicionales
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: "#605E5C", marginBottom: 10, fontFamily: F, lineHeight: 1.5 }}>
+              Los perfiles otorgan permisos extra sin cambiar el rol.
+              Ejemplo: el perfil <strong>PO</strong> permite crear solicitudes a un Usuario normal.
+            </div>
+            <ProfileMultiSelect
+              profiles={profiles}
+              selected={profileIds}
+              onChange={setProfileIds}
+            />
+            {profileIds.length > 0 && (
+              <div style={{ marginTop: 10, padding: "8px 10px", background: "#fff", borderRadius: 6, border: "1px solid #D8B4FE" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#7530AF", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, fontFamily: F }}>
+                  Permisos extra que se concederán
+                </div>
+                {profileIds.flatMap((pid) => {
+                  const p = profiles.find((x) => x.id === pid);
+                  return p ? [`• ${p.label} (${p.name}): ${p.description}`] : [];
+                }).map((line, i) => (
+                  <div key={i} style={{ fontSize: 11, color: "#605E5C", fontFamily: F, lineHeight: 1.5 }}>{line}</div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Estado (solo edit) */}
           {mode === "edit" && (
             <div>
@@ -768,6 +866,7 @@ export const UsersPage: React.FC = () => {
   const navigate = useNavigate();
   const [users,        setUsers]        = useState<AppUser[]>([]);
   const [teams,        setTeams]        = useState<Team[]>([]);
+  const [profiles,     setProfiles]     = useState<PermissionProfile[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState<string | null>(null);
   const [query,        setQuery]        = useState("");
@@ -790,7 +889,7 @@ export const UsersPage: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, teamsData] = await Promise.all([
+      const [data, teamsData, profilesData] = await Promise.all([
         getAppUsers({
           query:  query       || undefined,
           role:   filterRole  || undefined,
@@ -798,9 +897,11 @@ export const UsersPage: React.FC = () => {
           teamId: filterTeam  || undefined,
         }),
         listTeams({ isActive: true }),
+        getPermissionProfiles(),
       ]);
       setUsers(data);
       setTeams(teamsData);
+      setProfiles(profilesData);
       setError(null);
     } catch {
       setError("No se pudo cargar la lista de usuarios.");
@@ -1016,12 +1117,12 @@ export const UsersPage: React.FC = () => {
             {/* Table head */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "2fr 1.5fr 1fr 2fr 1fr 130px",
+              gridTemplateColumns: "2fr 1.5fr 1fr 1.5fr 1fr 0.8fr 160px",
               padding: "10px 16px",
               borderBottom: "2px solid #EDEBE9",
               background: "#FAFAFA",
             }}>
-              {["Nombre", "Email", "Rol", "Equipos", "Estado", "Acciones"].map((h) => (
+              {["Nombre", "Email", "Rol", "Equipos", "Estado", "Perfiles", "Acciones"].map((h) => (
                 <div key={h} style={{
                   fontSize: 11, fontWeight: 700, color: "#A19F9D",
                   textTransform: "uppercase", letterSpacing: "0.06em",
@@ -1037,7 +1138,7 @@ export const UsersPage: React.FC = () => {
                 key={u.id}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "2fr 1.5fr 1fr 2fr 1fr 130px",
+                  gridTemplateColumns: "2fr 1.5fr 1fr 1.5fr 1fr 0.8fr 160px",
                   padding: "12px 16px",
                   alignItems: "center",
                   borderBottom: i < users.length - 1 ? "1px solid #F3F2F1" : "none",
@@ -1102,8 +1203,31 @@ export const UsersPage: React.FC = () => {
                 {/* Estado */}
                 <div><StatusChip active={u.isActive} /></div>
 
+                {/* Perfiles */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
+                  {(u.profileIds ?? []).length === 0 ? (
+                    <span style={{ fontSize: 11, color: "#C8C6C4", fontFamily: F }}>—</span>
+                  ) : (
+                    (u.profileIds ?? []).map((pid) => {
+                      const p = profiles.find((x) => x.id === pid);
+                      if (!p) return null;
+                      return (
+                        <span key={pid} style={{
+                          display: "inline-flex", alignItems: "center",
+                          padding: "2px 8px", borderRadius: 20,
+                          fontSize: 10, fontWeight: 700, whiteSpace: "nowrap",
+                          background: "#F8F0FF", color: "#7530AF", border: "1px solid #D8B4FE",
+                          fontFamily: F,
+                        }}>
+                          {p.name}
+                        </span>
+                      );
+                    })
+                  )}
+                </div>
+
                 {/* Acciones */}
-                <div style={{ display: "flex", gap: 6 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   <OutlineBtn
                     onClick={() => setDrawer({ open: true, mode: "edit", user: u })}
                     icon={<Pencil size={12} />}
@@ -1129,6 +1253,7 @@ export const UsersPage: React.FC = () => {
         state={drawer}
         existingUpns={existingUpns}
         teams={teams}
+        profiles={profiles}
         onClose={() => setDrawer((d) => ({ ...d, open: false }))}
         onSaved={handleSaved}
         addToast={addToast}

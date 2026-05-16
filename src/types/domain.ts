@@ -244,6 +244,7 @@ export interface User {
 /**
  * AppUser — usuario registrado en la aplicación.
  * teamIds: lista de teams a los que pertenece (puede ser varios).
+ * profileIds: perfiles de permisos adicionales asignados (ej. ["pp-po"]).
  * Regla: role="Proveedor" → debe tener al menos 1 teamId de type="Provider".
  * Regla: role="Invitado" → nunca puede ser assignedToUserId en workItems/projects.
  */
@@ -255,6 +256,11 @@ export interface AppUser {
   role: AppRole;
   /** Equipos a los que pertenece — array porque un usuario puede estar en varios */
   teamIds: string[];
+  /**
+   * IDs de PermissionProfile asignados (ej. ["pp-po"]).
+   * Solo Admin puede asignar perfiles. Sincronizado con la tabla userProfiles (N:N).
+   */
+  profileIds?: string[];
   isActive: boolean;
   createdOn?: string;
   updatedOn?: string;
@@ -378,6 +384,69 @@ export interface RbacPermission {
 }
 
 export type RolePermissionsMap = Record<string, Record<string, boolean>>;
+
+// ── Permission Profiles ───────────────────────────────────
+/**
+ * Perfil de permisos adicionales (ej. "PO").
+ * NO es un rol. Se asigna a usuarios concretos para elevar permisos
+ * sin cambiar su rol de aplicación.
+ * Solo Admin puede crear/modificar/asignar perfiles.
+ */
+export interface PermissionProfile {
+  id: string;
+  name: string;
+  /** Nombre largo mostrado en UI */
+  label: string;
+  description: string;
+  isActive: boolean;
+  createdOn?: string;
+}
+
+/** Entrada N:N: qué claves de permiso otorga un perfil */
+export interface ProfilePermission {
+  id: string;
+  profileId: string;
+  permissionKey: string;
+}
+
+/** Entrada N:N (audit trail): qué perfiles tiene asignado cada usuario */
+export interface UserProfile {
+  id: string;
+  userId: string;
+  profileId: string;
+  assignedBy: string;
+  assignedOn: string;
+}
+
+/**
+ * Override por usuario — solo Admin puede crearlo.
+ * Permite elevar o revocar un permiso concreto para un usuario específico
+ * con justificación obligatoria y trazabilidad.
+ */
+export interface UserPermissionOverride {
+  id: string;
+  userId: string;
+  permissionKey: string;
+  /** true = conceder; false = revocar */
+  value: boolean;
+  reason: string;
+  createdBy: string;
+  createdOn: string;
+}
+
+/**
+ * Permisos efectivos pre-resueltos para un usuario concreto.
+ * Resultado de: Admin bypass | base rol | perfiles | overrides.
+ * Devuelto por GET /api/users/:userId/effective-permissions
+ */
+export interface EffectivePermissions {
+  /** Mapa completo clave→boolean ya resuelto */
+  permissions: Record<string, boolean>;
+  /** Claves que provienen de perfiles (no del rol base) — para info en UI */
+  fromProfiles: string[];
+  /** Overrides aplicados para este usuario — para info en UI */
+  overrides: Record<string, boolean>;
+}
 
 export interface AdminAuditEntry {
   id: string;
