@@ -25,7 +25,7 @@ import type {
   EffectivePermissions, DeliveryOwnerType, TeamType,
   ProjectStatus, WorkItemType, Priority, EvidenceType,
   RiskSeverity, RiskStatus, SyncStatus, VisibilityMode,
-  RequestType, RequestStatus,
+  RequestType, RequestStatus, AuditEntry, AuditEntityType,
 } from "../types/domain";
 
 import { sdkGet, sdkGetOne, sdkCreate, sdkUpdate, sdkDelete, IS_LOCAL } from "./dataverseSdk";
@@ -570,6 +570,14 @@ async function computeEffectivePermissions(userId: string): Promise<EffectivePer
   const user = userMap.get(userId);
   if (!user) throw new Error(`Usuario no encontrado: ${userId}`);
 
+  // 0. Admin bypass — all permissions = true (same logic as mock handler)
+  if (user.role === "Admin") {
+    const allKeysR = await api.retrieveMultipleRecords(E.rbacPermission, `?${SEL.rbacPerm}`);
+    const allKeys = allKeysR.entities.map(r => r.cproroad_name as string).filter(Boolean);
+    const perms = Object.fromEntries(allKeys.map(k => [k, true]));
+    return { permissions: perms, fromProfiles: [], overrides: {} } as unknown as EffectivePermissions;
+  }
+
   // 1. Permisos base del rol (rolepermission)
   const rolePermsR = await api.retrieveMultipleRecords(
     E.rolePermission,
@@ -927,6 +935,18 @@ export async function dvRequest<T>(
     if (q) users = users.filter(u =>
       u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
     );
+    // Enrich with profileIds (one query for all userProfiles, joined in-memory)
+    const upR = await api.retrieveMultipleRecords(E.userProfile, `?${SEL.userProfile}`);
+    const profileMap = new Map<string, string[]>();
+    upR.entities.forEach(up => {
+      const uid = lookup(up, "cproroad_userid");
+      const pid = lookup(up, "cproroad_profileid");
+      if (uid && pid) {
+        if (!profileMap.has(uid)) profileMap.set(uid, []);
+        profileMap.get(uid)!.push(pid);
+      }
+    });
+    users.forEach(u => { u.profileIds = profileMap.get(u.id) ?? []; });
     return users as unknown as T;
   }
 
@@ -1520,20 +1540,38 @@ export async function dvRequest<T>(
         cproroad_value:         b.value,
       });
     }
-    return dvRequest("GET", "/admin/role-permissions") as unknown as T;
+    // Devolver solo el mapa role→permisos (igual que el mock)
+    const rprPatch = await api.retrieveMultipleRecords(E.rolePermission, `?${SEL.rolePerms}`);
+    const rpMapPatch: RolePermissionsMap = {};
+    rprPatch.entities.forEach(r => {
+      const role = ROLE_F[r.cproroad_role as number];
+      if (!role) return;
+      if (!rpMapPatch[role]) rpMapPatch[role] = {};
+      rpMapPatch[role][r.cproroad_permissionkey as string] = r.cproroad_value ?? false;
+    });
+    return rpMapPatch as unknown as T;
   }
 
   if (method === "POST" && match(base, "/admin/role-permissions/reset")) {
     // Eliminar todos y dejar que el seed los recree
     const all = await api.retrieveMultipleRecords(E.rolePermission, "?$select=cproroad_rolepermissionid");
     await Promise.all(all.entities.map(r => api.deleteRecord(E.rolePermission, r.cproroad_rolepermissionid as string)));
-    return dvRequest("GET", "/admin/role-permissions") as unknown as T;
+    // Devolver solo el mapa role→permisos (igual que el mock)
+    const rprReset = await api.retrieveMultipleRecords(E.rolePermission, `?${SEL.rolePerms}`);
+    const rpMapReset: RolePermissionsMap = {};
+    rprReset.entities.forEach(r => {
+      const role = ROLE_F[r.cproroad_role as number];
+      if (!role) return;
+      if (!rpMapReset[role]) rpMapReset[role] = {};
+      rpMapReset[role][r.cproroad_permissionkey as string] = r.cproroad_value ?? false;
+    });
+    return rpMapReset as unknown as T;
   }
 
   // ════════════════════════════════════════════════════════
   //  ADMIN — AUDIT
   // ════════════════════════════════════════════════════════
-  if (method === "GET" && match(base, "/admin/audit")) {
+  if (method === "GET" && (match(base, "/admin/audit") || match(base, "/admin/audit-log"))) {
     const r = await api.retrieveMultipleRecords(
       E.activityLog, `?${SEL.activityLog}&$orderby=cproroad_at desc&$top=500`,
     );
@@ -1688,6 +1726,234 @@ export async function dvRequest<T>(
     const q = qp.get("q") ?? "";
     const results = await searchTenantUsersViaOffice365(q);
     return results as unknown as T;
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  AUDIT — Registro unificado de actividad
+  // ════════════════════════════════════════════════════════
+  if (method === "GET" && match(base, "/audit")) {
+    const filterProject = qp.get("projectId")   ?? "";
+    const filterEntity  = qp.get("entityType")  ?? "";
+    const filterAction  = qp.get("action")      ?? "";
+    const filterActor   = qp.get("actor")        ?? "";
+    const filterRole    = qp.get("actorRole")    ?? "";
+    const filterFrom    = qp.get("from")         ?? "";
+    const filterTo      = qp.get("to")           ?? "";
+    const filterQuery   = (qp.get("query")       ?? "").toLowerCase();
+    const onlyCritical  = qp.get("onlyCritical") === "true";
+
+    const CRITICAL_ACTIONS = new Set([
+      "RBAC_CHANGED", "RBAC_RESET_TO_DEFAULTS", "SETTINGS_CHANGED",
+      "WIP_LIMIT_CHANGED", "USER_DEACTIVATED", "USER_CREATED",
+      "Permiso cambiado", "Configuración actualizada",
+    ]);
+
+    const r = await api.retrieveMultipleRecords(
+      E.activityLog,
+      `?${SEL.activityLog}&$orderby=cproroad_at desc&$top=500`,
+    );
+
+    let entries = r.entities.map((raw): AuditEntry => {
+      const l = dvToActivityLog(raw);
+      const isCritical =
+        CRITICAL_ACTIONS.has(l.action) ||
+        (l.to === "Cerrado") ||
+        (l.to === "Resuelto" && l.entityType === "Risk");
+      return {
+        id:         l.id,
+        source:     "activityLog",
+        projectId:  l.projectId,
+        entityType: (l.entityType || "WorkItem") as AuditEntityType,
+        entityId:   l.entityId,
+        action:     l.action,
+        who:        l.who,
+        whoRole:    l.whoRole,
+        at:         l.at,
+        from:       l.from || undefined,
+        to:         l.to   || undefined,
+        note:       l.note,
+        isCritical,
+      };
+    });
+
+    if (filterProject) entries = entries.filter(e => e.projectId === filterProject);
+    if (filterEntity)  entries = entries.filter(e => e.entityType === filterEntity);
+    if (filterAction)  entries = entries.filter(e => e.action === filterAction);
+    if (filterActor)   entries = entries.filter(e =>
+      e.who === filterActor || e.who.toLowerCase().includes(filterActor.toLowerCase()),
+    );
+    if (filterRole)    entries = entries.filter(e => e.whoRole === filterRole);
+    if (filterFrom)    entries = entries.filter(e => new Date(e.at) >= new Date(filterFrom));
+    if (filterTo) {
+      const end = new Date(filterTo);
+      end.setHours(23, 59, 59, 999);
+      entries = entries.filter(e => new Date(e.at) <= end);
+    }
+    if (filterQuery) {
+      entries = entries.filter(e =>
+        e.action.toLowerCase().includes(filterQuery) ||
+        (e.from ?? "").toLowerCase().includes(filterQuery) ||
+        (e.to   ?? "").toLowerCase().includes(filterQuery) ||
+        (e.note ?? "").toLowerCase().includes(filterQuery),
+      );
+    }
+    if (onlyCritical) entries = entries.filter(e => e.isCritical);
+
+    return entries as unknown as T;
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  REPORTS / KPIs
+  // ════════════════════════════════════════════════════════
+  if (method === "GET" && match(base, "/reports/kpis")) {
+    const periodDays      = parseInt(qp.get("periodDays") ?? "30", 10);
+    const filterProjectId = qp.get("projectId") ?? "";
+    const filterAreaId    = qp.get("areaId")    ?? "";
+    const filterProvider  = qp.get("providerId") ?? "";
+    const filterDotStr    = qp.get("deliveryOwnerType") ?? "";
+    const onlyBlocked     = qp.get("onlyBlocked") === "true";
+    const onlyDueSoon     = qp.get("onlyDueSoon") === "true";
+
+    const prjClauses: string[] = [];
+    if (filterProjectId) prjClauses.push(`cproroad_projectid eq ${filterProjectId}`);
+    if (filterAreaId)    prjClauses.push(`_cproroad_businessareaid_value eq ${filterAreaId}`);
+    if (filterProvider)  prjClauses.push(`_cproroad_providerteamid_value eq ${filterProvider}`);
+    if (filterDotStr && DLVOWN_T[filterDotStr as DeliveryOwnerType] !== undefined)
+      prjClauses.push(`cproroad_deliveryownertype eq ${DLVOWN_T[filterDotStr as DeliveryOwnerType]}`);
+    const prjFilter = prjClauses.length ? `&$filter=${prjClauses.join(" and ")}` : "";
+
+    const userMap = await loadUsers();
+    const [prjR, teamsR, areasR, wiR, logR, riskR, stateR] = await Promise.all([
+      api.retrieveMultipleRecords(E.project,      `?${SEL.project}${prjFilter}`),
+      api.retrieveMultipleRecords(E.team,         `?${SEL.team}`),
+      api.retrieveMultipleRecords(E.businessArea, `?${SEL.businessArea}`),
+      api.retrieveMultipleRecords(E.workItem,     `?${SEL.workItem}`),
+      api.retrieveMultipleRecords(E.activityLog,  `?${SEL.activityLog}&$filter=cproroad_tovalue eq 'Cerrado'`),
+      api.retrieveMultipleRecords(E.risk,         `?${SEL.risk}`),
+      api.retrieveMultipleRecords(E.state,        `?${SEL.state}`),
+    ]);
+
+    const projects    = prjR.entities.map(r => dvToProject(r, userMap));
+    const projectIds  = new Set(projects.map(p => p.id));
+    let workItems     = wiR.entities.map(r => dvToWorkItem(r, userMap)).filter(wi => projectIds.has(wi.projectId));
+
+    const closedStateRaw = stateR.entities.find(s => (s.cproroad_name as string) === "Cerrado");
+    const closedStateId  = closedStateRaw ? (closedStateRaw.cproroad_stateid as string) : "";
+
+    const today       = new Date();
+    const dueSoonDate = new Date(today.getTime() + 14 * 86_400_000);
+    const periodStart = new Date(today.getTime() - periodDays * 86_400_000);
+
+    if (onlyBlocked)  workItems = workItems.filter(wi => !!wi.blockedReason);
+    if (onlyDueSoon)  workItems = workItems.filter(wi => wi.endDate && new Date(wi.endDate) <= dueSoonDate);
+
+    const allClosedLogs = logR.entities.map(dvToActivityLog).filter(l => projectIds.has(l.projectId));
+    const periodLogs    = allClosedLogs.filter(l => new Date(l.at) >= periodStart);
+    const closedIdsInPeriod = new Set(periodLogs.map(l => l.entityId));
+
+    const blocked    = workItems.filter(wi => !!wi.blockedReason).length;
+    const dueSoon    = workItems.filter(wi =>
+      wi.endDate && new Date(wi.endDate) <= dueSoonDate && wi.stateId !== closedStateId,
+    ).length;
+    const syncErrors = workItems.filter(wi => wi.syncStatus === "Error").length;
+
+    const kpis = {
+      totalProjects:  projects.length,
+      totalTasks:     workItems.length,
+      closedInPeriod: closedIdsInPeriod.size,
+      blocked,
+      dueSoon,
+      syncErrors,
+    };
+
+    // ── byProvider ─────────────────────────────────────
+    const teamNameMap = new Map<string, string>(
+      teamsR.entities.map(t => [t.cproroad_teamid as string, t.cproroad_name as string]),
+    );
+    const providerRowMap = new Map<string, { name: string; projectSet: Set<string>; tasks: typeof workItems }>();
+    for (const p of projects) {
+      const key  = p.providerId || "__it__";
+      const name = p.providerId
+        ? (teamNameMap.get(p.providerId) ?? p.providerId)
+        : "IT AirEuropa (interno)";
+      if (!providerRowMap.has(key)) providerRowMap.set(key, { name, projectSet: new Set(), tasks: [] });
+      providerRowMap.get(key)!.projectSet.add(p.id);
+    }
+    for (const wi of workItems) {
+      const prj = projects.find(p => p.id === wi.projectId);
+      if (!prj) continue;
+      providerRowMap.get(prj.providerId || "__it__")?.tasks.push(wi);
+    }
+    const byProvider = Array.from(providerRowMap.entries()).map(([pid, row]) => {
+      const tasks        = row.tasks;
+      const closedPeriod = tasks.filter(w => closedIdsInPeriod.has(w.id)).length;
+      const blockedTasks = tasks.filter(w => !!w.blockedReason).length;
+      const totalClosed  = closedStateId ? tasks.filter(w => w.stateId === closedStateId).length : 0;
+      const pct = tasks.length > 0 ? Math.round((totalClosed / tasks.length) * 100) : 0;
+      return { providerId: pid, providerName: row.name, projects: row.projectSet.size,
+               tasks: tasks.length, blocked: blockedTasks, closedInPeriod: closedPeriod, pctClosed: pct };
+    }).sort((a, b) => b.tasks - a.tasks);
+
+    // ── byArea ─────────────────────────────────────────
+    const areaNameMap = new Map<string, string>(
+      areasR.entities.map(a => [a.cproroad_businessareaid as string, a.cproroad_name as string]),
+    );
+    const areaRowMap = new Map<string, { name: string; projectSet: Set<string>; tasks: typeof workItems }>();
+    for (const p of projects) {
+      const key  = p.businessAreaId;
+      const name = areaNameMap.get(key) ?? key;
+      if (!areaRowMap.has(key)) areaRowMap.set(key, { name, projectSet: new Set(), tasks: [] });
+      areaRowMap.get(key)!.projectSet.add(p.id);
+    }
+    for (const wi of workItems) {
+      const prj = projects.find(p => p.id === wi.projectId);
+      if (!prj) continue;
+      areaRowMap.get(prj.businessAreaId)?.tasks.push(wi);
+    }
+    const byArea = Array.from(areaRowMap.entries()).map(([aid, row]) => {
+      const tasks        = row.tasks;
+      const closedPeriod = tasks.filter(w => closedIdsInPeriod.has(w.id)).length;
+      const blockedTasks = tasks.filter(w => !!w.blockedReason).length;
+      const totalClosed  = closedStateId ? tasks.filter(w => w.stateId === closedStateId).length : 0;
+      const pct = tasks.length > 0 ? Math.round((totalClosed / tasks.length) * 100) : 0;
+      return { areaId: aid, areaName: row.name, projects: row.projectSet.size,
+               tasks: tasks.length, blocked: blockedTasks, closedInPeriod: closedPeriod, pctClosed: pct };
+    }).sort((a, b) => b.tasks - a.tasks);
+
+    // ── weeklyTrend ────────────────────────────────────
+    const numWeeks   = Math.ceil(Math.min(periodDays, 90) / 7);
+    const weeklyTrend = Array.from({ length: numWeeks }, (_, i) => {
+      const weekEnd   = new Date(today.getTime() - i * 7 * 86_400_000);
+      const weekStart = new Date(weekEnd.getTime() - 7 * 86_400_000);
+      const closed    = allClosedLogs.filter(l =>
+        new Date(l.at) >= weekStart && new Date(l.at) < weekEnd,
+      ).length;
+      const label = weekEnd.toLocaleDateString("es-ES", { day: "2-digit", month: "short" });
+      return { label, closed };
+    }).reverse();
+
+    // ── topRisks ───────────────────────────────────────
+    const projectCodeMap = new Map(projects.map(p => [p.id, p.code]));
+    const risks = riskR.entities.map(dvToRisk).filter(r => projectIds.has(r.projectId));
+    const topRisks = risks
+      .filter(r => r.status !== "Resuelto")
+      .map(r => {
+        const daysLeft = r.dueDate
+          ? Math.ceil((new Date(r.dueDate).getTime() - today.getTime()) / 86_400_000)
+          : 999;
+        return { id: r.id, projectId: r.projectId,
+                 projectCode: projectCodeMap.get(r.projectId) ?? r.projectId,
+                 title: r.title, severity: r.severity, status: r.status,
+                 dueDate: r.dueDate ?? "", daysLeft };
+      })
+      .sort((a, b) => {
+        const sevOrd: Record<string, number> = { Alta: 0, Media: 1, Baja: 2 };
+        const s = (sevOrd[a.severity] ?? 1) - (sevOrd[b.severity] ?? 1);
+        return s !== 0 ? s : a.daysLeft - b.daysLeft;
+      })
+      .slice(0, 10);
+
+    return { kpis, byProvider, byArea, weeklyTrend, topRisks } as unknown as T;
   }
 
   // ════════════════════════════════════════════════════════

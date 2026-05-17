@@ -61,6 +61,8 @@ interface Props {
   canCreate: boolean;
   /** Proveedor/Usuario: pueden solicitar pero no crear WorkItems */
   canRequestOnly?: boolean;
+  /** Permiso RBAC REQUEST_CREATE para mostrar botón Nueva solicitud */
+  canCreateRequest?: boolean;
   onNew: () => void;
   totalVisible: number;
 }
@@ -110,7 +112,7 @@ const PHASES: { id: BacklogPhase; label: string; dot: string; title: string }[] 
 
 export const BacklogFilters: React.FC<Props> = ({
   filters, onChange, view, onViewChange,
-  canCreate, canRequestOnly, onNew, totalVisible,
+  canCreate, canRequestOnly, canCreateRequest, onNew, totalVisible,
 }) => {
   const navigate = useNavigate();
   const set = <K extends keyof BacklogFilterState>(k: K, v: BacklogFilterState[K]) =>
@@ -225,7 +227,7 @@ export const BacklogFilters: React.FC<Props> = ({
           )}
 
           {/* Proveedor/Usuario: solo solicitudes */}
-          {canRequestOnly && !canCreate && (
+          {canRequestOnly && canCreateRequest && !canCreate && (
             <button
               onClick={() => navigate("/requests")}
               style={{

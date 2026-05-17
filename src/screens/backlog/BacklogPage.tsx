@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffectiveUser } from "../../auth/ImpersonationContext";
+import { usePermission } from "../../auth/usePermission";
 import { useAppFilter } from "../../context/AppFilterContext";
 import {
   getWorkItems, getStates, getTransitions, patchWorkItemState,
@@ -132,10 +133,11 @@ export const BacklogPage: React.FC = () => {
   const scopedProjectIds = projectIdsScope;
 
   // ── RBAC gating ──────────────────────────────────────────
-  // TASK_CREATE: Solo IT AirEuropa y Admin pueden crear WorkItems directamente.
-  // Proveedor/Usuario crean SOLICITUDES, no WorkItems.
-  const canCreate = userRoles.some((r) => ["Admin", "IT AirEuropa"].includes(r));
-  // canRequestOnly: Proveedor/Usuario redirigen a /requests
+  // TASK_CREATE: controlado por permiso RBAC (Admin/IT por defecto)
+  const { allowed: canCreate } = usePermission("TASK_CREATE");
+  // REQUEST_CREATE: controlado por permiso RBAC
+  const { allowed: canCreateRequest } = usePermission("REQUEST_CREATE");
+  // canRequestOnly: Proveedor/Usuario no crean WorkItems directamente
   const canRequestOnly = userRoles.some((r) => ["Proveedor", "Usuario"].includes(r));
   // isBypass: Admin/IT AirEuropa pueden mover/editar cualquier tarea
   const isBypass = userRoles.some((r) => ["Admin", "IT AirEuropa"].includes(r));
@@ -428,6 +430,7 @@ export const BacklogPage: React.FC = () => {
         onViewChange={handleViewChange}
         canCreate={canCreate}
         canRequestOnly={canRequestOnly}
+        canCreateRequest={canCreateRequest}
         onNew={() => setCreateOpen(true)}
         totalVisible={filtered.length}
       />

@@ -87,7 +87,12 @@ interface GuardrailWarning {
 function analyzeGuardrails(transitions: Transition[], states: State[]): GuardrailWarning[] {
   const warnings: GuardrailWarning[] = [];
   const stateIds = new Set(states.map((s) => s.id));
-  const TERMINAL = "st-cls";
+  // Buscar el estado terminal dinámicamente por nombre o categoría para
+  // que funcione tanto con IDs mock ("st-cls") como con GUIDs de Dataverse.
+  const terminalState = states.find(
+    (s) => s.name === "Cerrado" || s.category === "Cerrado",
+  );
+  const TERMINAL = terminalState?.id ?? "st-cls";
 
   // 1. Transiciones sin roles
   transitions.forEach((t) => {

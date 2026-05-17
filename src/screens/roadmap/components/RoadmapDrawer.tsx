@@ -11,10 +11,12 @@ import {
   Tag, AlertTriangle, KanbanSquare, Map, Pencil, ListChecks,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useEffectiveUser } from "../../../auth/ImpersonationContext";
 import type { Project, BusinessArea, Provider, AppRole, WorkItem } from "../../../types/domain";
 import { getProjectWorkItems } from "../../../services/projectService";
 import { STATUS_COLOR, PRIORITY_COLOR, DELIVERY_COLOR } from "../tokens";
 import { Chip, ProgressBar } from "./RoadmapProjectCard";
+import { CreateProjectModal } from "../../projects/components/CreateProjectModal";
 
 // ── Constantes ────────────────────────────────────────────
 const W = 460;
@@ -26,16 +28,21 @@ interface Props {
   providers: Provider[];
   roles:     AppRole[];
   onClose:   () => void;
+  /** Callback para recargar tras guardar edición */
+  onProjectUpdated?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────
-export const RoadmapDrawer: React.FC<Props> = ({ project: p, areas, providers, roles, onClose }) => {
+export const RoadmapDrawer: React.FC<Props> = ({ project: p, areas, providers, roles, onClose, onProjectUpdated }) => {
   const navigate   = useNavigate();
-  const canEdit    = roles.includes("Admin") || roles.includes("IT AirEuropa");
+  // canEdit usa el usuario efectivo (respeta impersonación en test mode)
+  const { roles: effectiveRoles } = useEffectiveUser();
+  const canEdit    = effectiveRoles.includes("Admin") || effectiveRoles.includes("IT AirEuropa");
 
   const [workItems, setWorkItems] = useState<WorkItem[]>([]);
   const [loadingWI, setLoadingWI] = useState(false);
   const [activeTab, setActiveTab] = useState<"detail" | "workitems">("detail");
+  const [editOpen,  setEditOpen]  = useState(false);
 
   // Cerrar con Escape
   useEffect(() => {
@@ -151,7 +158,7 @@ export const RoadmapDrawer: React.FC<Props> = ({ project: p, areas, providers, r
             {/* Contenido del tab */}
             <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px" }}>
               {activeTab === "detail" && (
-                <DetailTab p={p} area={area} provider={provider} canEdit={canEdit} navigate={navigate} />
+                <DetailTab p={p} area={area} provider={provider} canEdit={canEdit} navigate={navigate} onEditProject={() => setEditOpen(true)} />
               )}
               {activeTab === "workitems" && (
                 <WorkItemsTab workItems={workItems} loading={loadingWI} />
@@ -160,15 +167,31 @@ export const RoadmapDrawer: React.FC<Props> = ({ project: p, areas, providers, r
           </>
         )}
       </aside>
+
+      {/* Modal de edición de proyecto */}
+      {p && editOpen && (
+        <CreateProjectModal
+          open={editOpen}
+          initialProject={p}
+          areas={areas}
+          providers={providers}
+          categories={[p.category].filter(Boolean)}
+          onClose={() => setEditOpen(false)}
+          onCreated={() => { setEditOpen(false); onProjectUpdated?.(); }}
+        />
+      )}
     </>
   );
 };
+
+// (modal de edición montado dentro del component)
 
 // ── Tab Detalle ───────────────────────────────────────────
 const DetailTab: React.FC<{
   p: Project; area?: BusinessArea; provider?: Provider;
   canEdit: boolean; navigate: ReturnType<typeof useNavigate>;
-}> = ({ p, area, provider, canEdit, navigate }) => (
+  onEditProject: () => void;
+}> = ({ p, area, provider, canEdit, navigate, onEditProject }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
     {/* Progreso */}
     <Section title="Avance">
@@ -218,7 +241,7 @@ const DetailTab: React.FC<{
           <QuickAction
             icon={<Pencil size={13} />}
             label="Editar proyecto"
-            onClick={() => alert("Editar — próximamente")}
+            onClick={onEditProject}
             variant="secondary"
           />
         )}
@@ -257,7 +280,10 @@ const WorkItemsTab: React.FC<{ workItems: WorkItem[]; loading: boolean }> = ({ w
           </div>
           <ProgressBar value={wi.progress} height={4} />
           <div style={{ marginTop: 4, fontSize: 10, color: "#8A8886" }}>
-            {wi.startDate} → {wi.endDate} · {wi.assignedToRole}
+            {wi.startDate ? new Date(wi.startDate).toLocaleDateString("es-ES", { day: "2-digit", month: "short" }) : "—"}
+            {" → "}
+            {wi.endDate   ? new Date(wi.endDate).toLocaleDateString(  "es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+            {" · "}{wi.assignedToRole}
           </div>
           {wi.blockedReason && (
             <div style={{ marginTop: 6, fontSize: 10, color: "#D83B01" }}>

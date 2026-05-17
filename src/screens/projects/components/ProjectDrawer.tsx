@@ -13,9 +13,13 @@ import {
   Clock, ChevronRight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { usePermission } from "../../../auth/usePermission";
+import { useEffectiveUser } from "../../../auth/ImpersonationContext";
+import { apiClient } from "../../../services/apiClient";
 import type { Project, BusinessArea, Provider, AppRole, WorkItem, State } from "../../../types/domain";
 import { Chip, ProgressBar, STATUS_COLOR, PRIORITY_COLOR } from "./ProjectCard";
 import { CreateWorkItemModal } from "./CreateWorkItemModal";
+import { CreateProjectModal } from "./CreateProjectModal";
 
 // ── Props ─────────────────────────────────────────────────
 interface Props {
@@ -25,6 +29,8 @@ interface Props {
   roles: AppRole[];
   states: State[];
   onClose: () => void;
+  /** Callback para recargar la lista tras guardar edición */
+  onProjectUpdated?: () => void;
 }
 
 const W = 440; // ancho del drawer
@@ -42,7 +48,10 @@ const STATE_TXT: Record<string, string> = {
 };
 
 // ── RBAC ──────────────────────────────────────────────────
-const canCreateTask = (roles: AppRole[]) =>
+// La verificación de canCreateTask se hace ahora vía RBAC (usePermission),
+// no con roles hardcodeados. Esta función se conserva solo para compatibilidad
+// con otras pantallas que la importen directamente.
+export const canCreateTask = (roles: AppRole[]) =>
   roles.includes("Admin") || roles.includes("IT AirEuropa") || roles.includes("Proveedor");
 
 // ── Helpers ───────────────────────────────────────────────
@@ -126,24 +135,27 @@ const WorkItemRow: React.FC<{
 
 // ── ProjectDrawer ─────────────────────────────────────────
 export const ProjectDrawer: React.FC<Props> = ({
-  project: p, areas, providers, roles, states, onClose,
+  project: p, areas, providers, roles, states, onClose, onProjectUpdated,
 }) => {
   const navigate = useNavigate();
-  const canEdit   = roles.includes("Admin") || roles.includes("IT AirEuropa");
-  const canCreate = canCreateTask(roles);
+  // canEdit usa el usuario efectivo (respeta impersonación en test mode)
+  const { roles: effectiveRoles } = useEffectiveUser();
+  const canEdit = effectiveRoles.includes("Admin") || effectiveRoles.includes("IT AirEuropa");
+  // Botón "+ Añadir tarea" controlado por permiso RBAC TASK_CREATE
+  const { allowed: canCreate } = usePermission("TASK_CREATE");
 
   const [workItems,  setWorkItems]  = useState<WorkItem[]>([]);
   const [wiLoading,  setWiLoading]  = useState(false);
   const [wiError,    setWiError]    = useState<string | null>(null);
   const [showAllWIs, setShowAllWIs] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen,   setEditOpen]   = useState(false);
 
   const loadWorkItems = useCallback(async (projectId: string) => {
     setWiLoading(true); setWiError(null);
     try {
-      const r = await fetch(`/api/projects/${projectId}/workitems`);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setWorkItems(await r.json());
+      const data = await apiClient.get<WorkItem[]>(`/projects/${projectId}/workitems`);
+      setWorkItems(data);
     } catch (e) {
       setWiError(e instanceof Error ? e.message : "Error al cargar tareas");
     } finally { setWiLoading(false); }
@@ -288,7 +300,7 @@ export const ProjectDrawer: React.FC<Props> = ({
                     onClick={() => { onClose(); navigate(`/gantt?projectId=${p.id}`); }} />
                   {canEdit && (
                     <DrawerAction icon={<Pencil size={14} />} label="Editar proyecto"
-                      onClick={() => alert(`Editar proyecto ${p.code} — próximamente`)} accent />
+                      onClick={() => setEditOpen(true)} accent />
                   )}
                 </div>
               </Section>
@@ -400,7 +412,7 @@ export const ProjectDrawer: React.FC<Props> = ({
         )}
       </aside>
 
-      {/* Modal de creación */}
+      {/* Modal de creación de tarea */}
       {p && (
         <CreateWorkItemModal
           open={createOpen}
@@ -408,6 +420,19 @@ export const ProjectDrawer: React.FC<Props> = ({
           states={states}
           onClose={() => setCreateOpen(false)}
           onCreated={() => loadWorkItems(p.id)}
+        />
+      )}
+
+      {/* Modal de edición de proyecto */}
+      {p && editOpen && (
+        <CreateProjectModal
+          open={editOpen}
+          initialProject={p}
+          areas={areas}
+          providers={providers}
+          categories={[p.category].filter(Boolean)}
+          onClose={() => setEditOpen(false)}
+          onCreated={() => { setEditOpen(false); onProjectUpdated?.(); }}
         />
       )}
     </>

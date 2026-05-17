@@ -21,9 +21,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, Download, Plus, BarChart2 } from "lucide-react";
 
-import { useAuth } from "../../auth/AuthContext";
 import { useEffectiveUser } from "../../auth/ImpersonationContext";
 import type { AppUser } from "../../auth/ImpersonationContext";
+import { usePermission } from "../../auth/usePermission";
 import { getProjects, getBusinessAreas, getProviders } from "../../services/projectService";
 import { getWorkItems, getStates, getTransitions } from "../../services/workItemService";
 import { apiClient } from "../../services/apiClient";
@@ -90,8 +90,7 @@ const ActionBtn: React.FC<{
 
 // ── GanttPage ─────────────────────────────────────────────
 export const GanttPage: React.FC = () => {
-  const { roles } = useAuth();
-  const { user: currentEffectiveUser } = useEffectiveUser();
+  const { roles: effectiveRoles, user: currentEffectiveUser } = useEffectiveUser();
   const appUser = currentEffectiveUser as AppUser;
 
   // ── Ámbito global (año + área + proyecto) ──────────────────────────
@@ -120,8 +119,10 @@ export const GanttPage: React.FC = () => {
   const [selectedRow,     setSelectedRow]     = useState<GanttRowData | null>(null);
   const [createWIOpen,    setCreateWIOpen]    = useState(false);
 
-  const canAdmin    = roles.includes("Admin") || roles.includes("IT AirEuropa");
-  const isProveedor = (roles as AppRole[]).includes("Proveedor") && !canAdmin;
+  const canAdmin    = effectiveRoles.includes("Admin") || effectiveRoles.includes("IT AirEuropa");
+  const isProveedor = (effectiveRoles as AppRole[]).includes("Proveedor") && !canAdmin;
+  // Botón +WorkItem controlado por permiso RBAC TASK_CREATE
+  const { allowed: canCreateWorkItem } = usePermission("TASK_CREATE");
 
   // Sincronizar periodo cuando cambia el año en el ámbito
   const prevYearRef = useRef(selectedYear);
@@ -149,7 +150,7 @@ export const GanttPage: React.FC = () => {
         getProviders(),
         getStates(),
         getTransitions(),
-        apiClient.get<AppUser[]>("/appusers"),
+        apiClient.get<AppUser[]>("/app-users"),
         apiClient.get<Team[]>("/teams"),
       ]);
       setProjects(projs);
@@ -491,7 +492,7 @@ export const GanttPage: React.FC = () => {
 
         {/* Acciones */}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {canAdmin && (
+          {canCreateWorkItem && (
             <ActionBtn
               icon={<Plus size={13} />}
               label="+WorkItem"
@@ -606,7 +607,7 @@ export const GanttPage: React.FC = () => {
         row={selectedRow}
         states={states}
         transitions={transitions}
-        roles={roles}
+        roles={effectiveRoles as AppRole[]}
         appUser={appUser}
         onClose={() => setSelectedRow(null)}
         onSaved={handleSaved}

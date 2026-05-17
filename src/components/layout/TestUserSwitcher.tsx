@@ -13,6 +13,7 @@ import React, { useState } from "react";
 import { UserCheck, RefreshCw, LogOut } from "lucide-react";
 import { useImpersonation } from "../../auth/ImpersonationContext";
 import { UserSwitcherModal } from "./UserSwitcherModal";
+import { UserAvatar } from "../ui/UserAvatar";
 
 // ── Design tokens (hereda paleta del sidebar oscuro) ─────────────
 const T = {
@@ -24,14 +25,6 @@ const T = {
   danger:  "#FF8C8C",
 };
 
-const ROLE_AVATAR: Record<string, string> = {
-  "Admin":        "#7C3AED",
-  "IT AirEuropa": "#0078D4",
-  "Proveedor":    "#059669",
-  "Usuario":      "#D97706",
-  "Invitado":     "#6B7280",
-};
-
 const ROLE_CHIP: Record<string, { bg: string; text: string }> = {
   "Admin":        { bg: "rgba(124,58,237,0.20)", text: "#C4B5FD" },
   "IT AirEuropa": { bg: "rgba(40,153,245,0.20)", text: "#93C5FD" },
@@ -40,27 +33,23 @@ const ROLE_CHIP: Record<string, { bg: string; text: string }> = {
   "Invitado":     { bg: "rgba(107,114,128,0.20)", text: "#D1D5DB" },
 };
 
-function initials(name: string) {
-  return name.split(" ").map(w => w[0] ?? "").join("").slice(0, 2).toUpperCase();
-}
-
 interface Props { collapsed: boolean; }
 
 export const TestUserSwitcher: React.FC<Props> = ({ collapsed }) => {
   const {
     realUser, effectiveUser, impersonatedUser,
     isImpersonating, setImpersonatedUser, clearImpersonation,
-    teamNameMap,
+    teamNameMap, permProfilesMap,
   } = useImpersonation();
 
   const [modalOpen, setModalOpen] = useState(false);
 
-  const avatarBg  = ROLE_AVATAR[effectiveUser.role] ?? "#6B7280";
   const chip      = ROLE_CHIP[effectiveUser.role] ?? ROLE_CHIP["Invitado"];
   const teamNames = (impersonatedUser?.teamIds ?? [])
     .map(id => teamNameMap[id])
     .filter(Boolean)
     .join(", ");
+  const profileLabels = (effectiveUser.profileIds ?? []).map(pid => permProfilesMap[pid] ?? pid);
 
   // ── Colapsado: solo avatar + click para abrir modal ──────────────
   if (collapsed) {
@@ -77,13 +66,16 @@ export const TestUserSwitcher: React.FC<Props> = ({ collapsed }) => {
           }}
         >
           <div style={{
-            width: 28, height: 28, borderRadius: "50%",
-            background: avatarBg,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#fff", fontSize: 10, fontWeight: 700,
+            borderRadius: "50%",
             border: isImpersonating ? `2px solid ${T.accent}` : "2px solid transparent",
+            lineHeight: 0,
+            boxSizing: "content-box",
           }}>
-            {initials(effectiveUser.displayName)}
+            <UserAvatar
+              displayName={effectiveUser.displayName}
+              upn={effectiveUser.upn}
+              size={26}
+            />
           </div>
         </button>
         <UserSwitcherModal
@@ -128,13 +120,16 @@ export const TestUserSwitcher: React.FC<Props> = ({ collapsed }) => {
         {/* Avatar */}
         <div style={{
           flexShrink: 0,
-          width: 30, height: 30, borderRadius: "50%",
-          background: avatarBg,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: "#fff", fontSize: 11, fontWeight: 700,
+          borderRadius: "50%",
           border: isImpersonating ? `2px solid ${T.accent}` : "2px solid transparent",
+          lineHeight: 0,
+          boxSizing: "content-box",
         }}>
-          {initials(effectiveUser.displayName)}
+          <UserAvatar
+            displayName={effectiveUser.displayName}
+            upn={effectiveUser.upn}
+            size={28}
+          />
         </div>
 
         {/* Info */}
@@ -153,6 +148,21 @@ export const TestUserSwitcher: React.FC<Props> = ({ collapsed }) => {
               {teamNames}
             </div>
           ) : null}
+          {/* Perfiles de permisos */}
+          {profileLabels.length > 0 && (
+            <div style={{ display: "flex", gap: 3, marginTop: 2, flexWrap: "wrap" }}>
+              {profileLabels.map((label, i) => (
+                <span key={i} style={{
+                  fontSize: 8, fontWeight: 700, letterSpacing: "0.04em",
+                  padding: "1px 4px", borderRadius: 3,
+                  background: "rgba(40,153,245,0.18)", color: "#93C5FD",
+                  border: "1px solid rgba(40,153,245,0.30)",
+                }}>
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Chip rol */}

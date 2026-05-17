@@ -30,6 +30,7 @@ export interface AppUser {
   role:        AppRole | "Invitado";
   isActive:    boolean;
   teamIds?:    string[];
+  profileIds?: string[];
   createdOn?:  string;
   updatedOn?:  string;
 }
@@ -44,6 +45,8 @@ interface ImpersonationValue {
   loadingUsers:      boolean;
   /** Mapa id→nombre de equipo para mostrar en el banner */
   teamNameMap:       Record<string, string>;
+  /** Mapa profileId→label de perfil de permisos */
+  permProfilesMap:   Record<string, string>;
   setImpersonatedUser: (userId: string) => void;
   clearImpersonation:  () => void;
 }
@@ -63,20 +66,27 @@ export const ImpersonationProvider: React.FC<Props> = ({ realUser, children }) =
   const [loadingUsers, setLoadingUsers]       = useState(true);
   const [impersonatedUser, setImpersonated]   = useState<AppUser | null>(null);
   const [teamNameMap, setTeamNameMap]         = useState<Record<string, string>>({});
+  const [permProfilesMap, setPermProfilesMap] = useState<Record<string, string>>({});
 
-  // ── Cargar appUsers + equipos ────────────────────────────────────
+  // ── Cargar appUsers + equipos + perfiles ────────────────────────
   useEffect(() => {
     setLoadingUsers(true);
     Promise.all([
       apiClient.get<AppUser[]>("/app-users"),
       apiClient.get<Array<{ id: string; name: string }>>("/teams").catch(() => [] as Array<{ id: string; name: string }>),
-    ]).then(([users, teams]) => {
+      apiClient.get<Array<{ id: string; label: string }>>("/permission-profiles").catch(() => [] as Array<{ id: string; label: string }>),
+    ]).then(([users, teams, profiles]) => {
         setAppUsers(users);
 
-        // Construir mapa id→nombre
+        // Construir mapa id→nombre de equipo
         const map: Record<string, string> = {};
         teams.forEach((t) => { map[t.id] = t.name; });
         setTeamNameMap(map);
+
+        // Construir mapa profileId→label
+        const ppMap: Record<string, string> = {};
+        profiles.forEach((p) => { ppMap[p.id] = p.label || p.id; });
+        setPermProfilesMap(ppMap);
 
         // Restaurar sesión desde localStorage
         const savedId = localStorage.getItem(LS_KEY);
@@ -119,9 +129,10 @@ export const ImpersonationProvider: React.FC<Props> = ({ realUser, children }) =
     appUsers,
     loadingUsers,
     teamNameMap,
+    permProfilesMap,
     setImpersonatedUser,
     clearImpersonation,
-  }), [realUser, impersonatedUser, effectiveUser, appUsers, loadingUsers, teamNameMap, setImpersonatedUser, clearImpersonation]);
+  }), [realUser, impersonatedUser, effectiveUser, appUsers, loadingUsers, teamNameMap, permProfilesMap, setImpersonatedUser, clearImpersonation]);
 
   return (
     <ImpersonationContext.Provider value={value}>

@@ -36,12 +36,14 @@ interface Props {
   workItems: WorkItem[];
   requests: Request[];
   effectiveUserId: string;
+  /** Controlado por RBAC REQUEST_CREATE; oculta la acción "Nueva solicitud" si false */
+  canCreateRequest?: boolean;
   onNavigate: (href: string) => void;
 }
 
 // ── Component ─────────────────────────────────────────────
 export const RoleActions: React.FC<Props> = ({
-  roles, workItems, requests, effectiveUserId, onNavigate,
+  roles, workItems, requests, effectiveUserId, canCreateRequest = false, onNavigate,
 }) => {
   const isIT       = roles.includes("Admin") || roles.includes("IT AirEuropa");
   const isProveedor = roles.includes("Proveedor") && !isIT;
@@ -181,8 +183,9 @@ export const RoleActions: React.FC<Props> = ({
     }
 
     // ── Usuario ───────────────────────────────────────────
-    return [
-      {
+    const usuarioActions: DynAction[] = [
+      // Solo si el usuario tiene permiso REQUEST_CREATE
+      ...(canCreateRequest ? [{
         id: "usr-newreq",
         count: null,
         dot: "➕",
@@ -193,7 +196,7 @@ export const RoleActions: React.FC<Props> = ({
         href: "/requests?new=true",
         primary: true,
         alwaysShow: true,
-      },
+      } as DynAction] : []),
       {
         id: "usr-myreqs",
         count: myRequests,
@@ -237,7 +240,8 @@ export const RoleActions: React.FC<Props> = ({
         alwaysShow: accCount > 0,
       },
     ];
-  }, [roles, workItems, requests, effectiveUserId, isIT, isProveedor]);
+    return usuarioActions;
+  }, [roles, workItems, requests, effectiveUserId, isIT, isProveedor, canCreateRequest]);
 
   const visible = actions.filter((a) => a.alwaysShow || (a.count !== null && a.count > 0));
 

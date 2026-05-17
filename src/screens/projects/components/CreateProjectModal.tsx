@@ -12,6 +12,8 @@ import type { BusinessArea, Provider, Team, AppUser, AppRole, VisibilityMode } f
 import { listTeams } from "../../../services/teamService";
 import { listAppUsers } from "../../../services/userService";
 import { filterTeamsForRole, filterUsersForAssignment } from "../../../services/assignmentService";
+import { createProject, patchProject } from "../../../services/projectService";
+import type { Project } from "../../../types/domain";
 import { ProjectVisibilitySelector } from "./ProjectVisibilitySelector";
 
 // ── Payload ───────────────────────────────────────────────
@@ -44,6 +46,8 @@ interface Props {
   areas: BusinessArea[];
   providers: Provider[];
   categories: string[];
+  /** Si se proporciona, el modal funciona en modo edición */
+  initialProject?: Project;
   onClose: () => void;
   onCreated: () => void;
 }
@@ -131,8 +135,9 @@ const EMPTY_FORM: CreateProjectPayload = {
 
 // ── CreateProjectModal ────────────────────────────────────
 export const CreateProjectModal: React.FC<Props> = ({
-  open, areas, providers, categories, onClose, onCreated,
+  open, areas, providers, categories, initialProject, onClose, onCreated,
 }) => {
+  const isEditMode = Boolean(initialProject);
   const [form, setForm]     = useState<CreateProjectPayload>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof CreateProjectPayload | "form", string>>>({});
   const [saving, setSaving] = useState(false);
@@ -170,9 +175,9 @@ export const CreateProjectModal: React.FC<Props> = ({
       .finally(() => setLoadingRef(false));
   }, [open]);
 
-  // Smart preselection de visibilityTeamIds cuando cambia deliveryOwnerType o providerTeamId
+  // Smart preselection de visibilityTeamIds — solo en modo creación
   useEffect(() => {
-    if (!open) return;
+    if (!open || isEditMode) return;
     let suggested: string[];
     if (form.deliveryOwnerType === "Proveedor") {
       // Proyectos de proveedor → team-it + equipo proveedor seleccionado
@@ -185,14 +190,37 @@ export const CreateProjectModal: React.FC<Props> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, form.deliveryOwnerType, form.providerTeamId]);
 
-  // Reset al abrir
+  // Reset/pre-fill al abrir
   useEffect(() => {
     if (open) {
-      setForm(EMPTY_FORM);
+      if (initialProject) {
+        // Modo edición: pre-rellenar desde el proyecto
+        setForm({
+          code:              initialProject.code,
+          name:              initialProject.name,
+          businessAreaId:    initialProject.businessAreaId,
+          deliveryOwnerType: initialProject.deliveryOwnerType,
+          providerId:        initialProject.providerId ?? "",
+          providerTeamId:    initialProject.providerTeamId ?? "",
+          status:            initialProject.status,
+          category:          initialProject.category ?? "",
+          priority:          initialProject.priority,
+          startDate:         (initialProject.startDate ?? "").substring(0, 10),
+          endDate:           (initialProject.endDate   ?? "").substring(0, 10),
+          assignedToRole:    initialProject.assignedToRole ?? "",
+          assignedToTeamId:  initialProject.assignedToTeamId ?? "",
+          assignedToUserId:  initialProject.assignedToUserId ?? "",
+          visibilityMode:    initialProject.visibilityMode ?? "Enterprise",
+          visibilityTeamIds: initialProject.visibilityTeamIds ?? [],
+        });
+      } else {
+        setForm(EMPTY_FORM);
+      }
       setErrors({});
       setSuccess(false);
       setTimeout(() => nameRef.current?.focus(), 80);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Cerrar con Escape
@@ -234,23 +262,35 @@ export const CreateProjectModal: React.FC<Props> = ({
     setErrors({});
 
     try {
-      const resp = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+      const payload = {
+        code:              form.code.trim(),
+        name:              form.name.trim(),
+        businessAreaId:    form.businessAreaId,
+        deliveryOwnerType: form.deliveryOwnerType,
+        providerTeamId:    form.providerTeamId || form.providerId || undefined,
+        status:            form.status,
+        category:          form.category,
+        priority:          form.priority,
+        startDate:         form.startDate,
+        endDate:           form.endDate,
+        assignedToTeamId:  form.assignedToTeamId  || undefined,
+        assignedToUserId:  form.assignedToUserId  || undefined,
+        visibilityMode:    form.visibilityMode,
+        visibilityTeamIds: form.visibilityTeamIds,
+      };
 
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        setErrors({ form: (data as { error?: string }).error ?? `Error ${resp.status}` });
-        return;
+      if (isEditMode && initialProject) {
+        await patchProject(initialProject.id, payload);
+      } else {
+        await createProject({ ...payload, progress: 0 });
       }
 
       setSuccess(true);
       onCreated();
       setTimeout(() => { onClose(); }, 900);
-    } catch {
-      setErrors({ form: "Error de red. Inténtalo de nuevo." });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      setErrors({ form: msg || (isEditMode ? "Error al guardar el proyecto." : "Error al crear el proyecto. Inténtalo de nuevo.") });
     } finally {
       setSaving(false);
     }
@@ -270,7 +310,7 @@ export const CreateProjectModal: React.FC<Props> = ({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Crear proyecto"
+        aria-label={isEditMode ? "Editar proyecto" : "Crear proyecto"}
         style={{
           position: "fixed", top: "50%", left: "50%",
           transform: "translate(-50%, -50%)",
@@ -291,10 +331,10 @@ export const CreateProjectModal: React.FC<Props> = ({
         }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: C.text }}>
-              + Nuevo proyecto
+              {isEditMode ? `✏️ Editar proyecto ${initialProject?.code}` : "+ Nuevo proyecto"}
             </h2>
             <p style={{ margin: "2px 0 0", fontSize: 11, color: C.textMuted }}>
-              Crea una nueva épica de proyecto
+              {isEditMode ? "Modifica los datos del proyecto" : "Crea una nueva épica de proyecto"}
             </p>
           </div>
           <button
@@ -621,7 +661,7 @@ export const CreateProjectModal: React.FC<Props> = ({
                 display: "inline-flex", alignItems: "center", gap: 6,
               }}
             >
-              {saving ? <><Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> Guardando…</> : "Crear proyecto"}
+              {saving ? <><Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> Guardando…</> : (isEditMode ? "Guardar cambios" : "Crear proyecto")}
               <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
             </button>
           </div>

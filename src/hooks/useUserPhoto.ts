@@ -15,10 +15,8 @@
 import { useState, useEffect } from "react";
 import { fetchPhotoViaOffice365 } from "../services/office365Connector";
 
-/** true cuando estamos en local (npm run dev). Mismo patrón que app-calen-vs. */
-const IS_LOCAL =
-  typeof window !== "undefined" &&
-  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+/** true SOLO cuando VITE_USE_MOCKS=true (entorno LOCAL). En cualquier build → false. */
+const IS_LOCAL: boolean = import.meta.env.VITE_USE_MOCKS === 'true';
 
 export type PhotoStatus = "blocked" | "no-upn" | "loading" | "ok" | "failed";
 

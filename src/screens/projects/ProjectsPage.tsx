@@ -12,7 +12,8 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Plus, Download, RefreshCw, LayoutGrid } from "lucide-react";
 
-import { useAuth } from "../../auth/AuthContext";
+import { useEffectiveUser } from "../../auth/ImpersonationContext";
+import { usePermission } from "../../auth/usePermission";
 import {
   PageHeader, Button,
   LoadingSkeleton, ErrorState as UIErrorState, EmptyState as UIEmptyState,
@@ -72,7 +73,8 @@ function exportCSV(projects: Project[], areas: BusinessArea[], providers: Provid
 
 // ── ProjectsPage ──────────────────────────────────────────
 export const ProjectsPage: React.FC = () => {
-  const { roles } = useAuth();
+  const { roles } = useEffectiveUser();
+  const { allowed: canCreateProject } = usePermission("PROJECT_CREATE");
 
   // Estado de datos
   const [allProjects, setAllProjects] = useState<Project[]>([]);
@@ -99,6 +101,8 @@ export const ProjectsPage: React.FC = () => {
 
   const canAdmin = roles.includes("Admin") || roles.includes("IT AirEuropa");
   const isProveedor = roles.includes("Proveedor") && !canAdmin;
+  // Botón "Nuevo proyecto" controlado por permiso RBAC PROJECT_CREATE
+  // (Admin siempre puede; usePermission devuelve true para Admin por bypass)
 
   // ── Ámbito global (año + área) ──────────────────────────────
   const { selectedYear, selectedAreaId } = useAppFilter();
@@ -209,7 +213,7 @@ export const ProjectsPage: React.FC = () => {
                 Exportar
               </Button>
             )}
-            {canAdmin && (
+            {canCreateProject && (
               <Button
                 size="sm"
                 variant="primary"
@@ -294,6 +298,7 @@ export const ProjectsPage: React.FC = () => {
         roles={roles}
         states={states}
         onClose={() => setSelectedProject(null)}
+        onProjectUpdated={() => { loadData(); }}
       />
 
       {/* ── Modal crear proyecto ── */}

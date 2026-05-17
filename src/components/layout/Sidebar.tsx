@@ -3,10 +3,11 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronUp, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { NAV_GROUPS, NAV_ADMIN_ITEM, type NavItem } from "../../navigation/menuConfig";
 import { useAuth } from "../../auth/AuthContext";
-import { useEffectiveUser } from "../../auth/ImpersonationContext";
+import { useEffectiveUser, useImpersonation } from "../../auth/ImpersonationContext";
 import { hasRole } from "../../auth/permissions";
 import { useRolePermissions } from "../../auth/usePermission";
 import { TestUserSwitcher } from "./TestUserSwitcher";
+import { UserAvatar } from "../ui/UserAvatar";
 import { getEnv, ENV_COLORS } from "../../services/environment";
 
 // ── Design tokens ──────────────────────────────────────────────────────────
@@ -31,8 +32,13 @@ export const Sidebar: React.FC = () => {
     try { return localStorage.getItem(SIDEBAR_KEY) === "1"; } catch { return false; }
   });
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(["admin"]));
-  const { user: realUser, appUser: realAppUser } = useAuth();
-  const { user: effectiveUserObj, roles } = useEffectiveUser();
+  const { appUser: realAppUser } = useAuth();
+  const { roles } = useEffectiveUser();
+  const { appUsers, permProfilesMap } = useImpersonation();
+
+  // Buscar el usuario real con todos los campos (incluye profileIds) desde la lista completa
+  const realAppUserFull = appUsers.find(u => u.id === realAppUser.id) ?? realAppUser;
+  const realProfileIds  = realAppUserFull.profileIds ?? [];
   const { permissions: rbacPerms } = useRolePermissions();
   const location = useLocation();
   const navigate = useNavigate();
@@ -46,9 +52,6 @@ export const Sidebar: React.FC = () => {
 
   const toggleGroup = (id: string) =>
     setOpenGroups(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
-
-  const initials = (effectiveUserObj.displayName ?? realUser.displayName).split(" ")
-    .map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
   const env      = getEnv();
   const envColor = ENV_COLORS[env];
@@ -171,14 +174,18 @@ export const Sidebar: React.FC = () => {
       {/* ── Switcher de usuario de prueba (condicional) ── */}
       {showSwitcher && <TestUserSwitcher collapsed={collapsed} />}
 
-      {/* ── Footer: avatar + entorno ── */}
+      {/* ── Footer: usuario REAL logeado en Power Apps ── */}
       <div style={{ borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10,
                       padding: collapsed ? "12px 0" : "12px 14px",
                       justifyContent: collapsed ? "center" : "flex-start" }}>
           {/* Avatar con dot de entorno cuando está colapsado */}
           <div style={{ position: "relative", flexShrink: 0 }}>
-            <Avatar initials={initials} />
+            <UserAvatar
+              displayName={realAppUser.displayName}
+              upn={realAppUser.upn}
+              size={28}
+            />
             {collapsed && (
               <span style={{
                 position: "absolute", bottom: -1, right: -1,
@@ -192,10 +199,10 @@ export const Sidebar: React.FC = () => {
             <div style={{ overflow: "hidden", flex: 1 }}>
               <div style={{ color: T.text, fontSize: 12, fontWeight: 600,
                             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {effectiveUserObj.displayName}
+                {realAppUser.displayName}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                <span style={{ color: T.muted, fontSize: 10 }}>{roles[0]}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2, flexWrap: "wrap" }}>
+                <span style={{ color: T.muted, fontSize: 10 }}>{realAppUser.role}</span>
                 {/* Badge de entorno */}
                 <span style={{
                   fontSize: 9, fontWeight: 700, letterSpacing: "0.06em",
@@ -207,6 +214,21 @@ export const Sidebar: React.FC = () => {
                   {env}
                 </span>
               </div>
+              {/* Perfiles de permisos del usuario real */}
+              {realProfileIds.length > 0 && (
+                <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
+                  {realProfileIds.map(pid => (
+                    <span key={pid} style={{
+                      fontSize: 8, fontWeight: 700, letterSpacing: "0.04em",
+                      padding: "1px 5px", borderRadius: 3,
+                      background: "rgba(40,153,245,0.15)", color: "#93C5FD",
+                      border: "1px solid rgba(40,153,245,0.30)",
+                    }}>
+                      {permProfilesMap[pid] ?? pid}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -246,14 +268,6 @@ const CollapseBtn: React.FC<{ collapsed: boolean; onClick: () => void }> = ({ co
   >
     {collapsed ? <ChevronsRight size={17} /> : <ChevronsLeft size={17} />}
   </button>
-);
-
-const Avatar: React.FC<{ initials: string }> = ({ initials }) => (
-  <div style={{ width: 28, height: 28, minWidth: 28, borderRadius: "50%", background: "#0078D4",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: "#fff", fontSize: 11, fontWeight: 700 }}>
-    {initials}
-  </div>
 );
 
 const NavBtn: React.FC<{

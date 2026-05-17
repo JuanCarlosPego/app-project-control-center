@@ -28,6 +28,7 @@ import { listTeams } from "../../services/teamService";
 import { listAppUsers } from "../../services/userService";
 import type { Team } from "../../types/domain";
 import type { AppRole } from "../../auth/permissions";
+import { UserAvatar } from "../ui/UserAvatar";
 
 // ── localStorage keys ─────────────────────────────────────────────
 const LS_RECENT  = "sim:recentUserIds";
@@ -90,9 +91,6 @@ const ALL_ROLES: Array<AppRole | "Todos"> = [
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────
-function avatarInitials(name: string) {
-  return name.split(" ").map(w => w[0] ?? "").join("").slice(0, 2).toUpperCase();
-}
 
 // ── Sub-components ────────────────────────────────────────────────
 
@@ -109,7 +107,6 @@ const UserCard: React.FC<UserCardProps> = ({
   user, isSelected, isFav, teamNameMap, onSelect, onToggleFav,
 }) => {
   const chip = ROLE_CHIP[user.role] ?? ROLE_CHIP["Invitado"];
-  const avatarBg = ROLE_AVATAR[user.role] ?? "#6B7280";
   const teamNames = (user.teamIds ?? [])
     .map(id => teamNameMap[id])
     .filter(Boolean)
@@ -143,15 +140,11 @@ const UserCard: React.FC<UserCardProps> = ({
       }}
     >
       {/* Avatar */}
-      <div style={{
-        flexShrink: 0,
-        width: 34, height: 34, borderRadius: "50%",
-        background: avatarBg,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        color: "#fff", fontSize: 12, fontWeight: 700,
-      }}>
-        {avatarInitials(user.displayName)}
-      </div>
+      <UserAvatar
+        displayName={user.displayName}
+        upn={user.upn}
+        size={34}
+      />
 
       {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>

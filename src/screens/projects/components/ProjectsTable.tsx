@@ -10,6 +10,10 @@ import type { Project, BusinessArea, Provider } from "../../../types/domain";
 import type { AppRole } from "../../../types/domain";
 import { Chip, ProgressBar, STATUS_COLOR, PRIORITY_COLOR } from "./ProjectCard";
 
+// ── Helper de fecha ───────────────────────────────────────────
+const fmtDate = (d?: string) =>
+  d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
 interface Props {
   projects: Project[];
   areas: BusinessArea[];
@@ -102,8 +106,8 @@ export const ProjectsTable: React.FC<Props> = ({ projects, areas, providers, rol
 
               {/* Fechas */}
               <td style={{ padding: "10px 12px", whiteSpace: "nowrap", fontSize: 11, color: "#8A8886" }}>
-                <div>{p.startDate}</div>
-                <div>{p.endDate}</div>
+                <div>{fmtDate(p.startDate)}</div>
+                <div>{fmtDate(p.endDate)}</div>
               </td>
 
               {/* Quick actions */}

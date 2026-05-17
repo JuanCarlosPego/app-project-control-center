@@ -18,6 +18,7 @@ import { RefreshCw, Download, LayoutDashboard, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { useEffectiveUser } from "../../auth/ImpersonationContext";
+import { usePermission }   from "../../auth/usePermission";
 import { getProjects, getBusinessAreas, getProviders } from "../../services/projectService";
 import { getWorkItems, getRisks, getStates } from "../../services/workItemService";
 import { getRequests } from "../../services/requestService";
@@ -75,6 +76,8 @@ export const DashboardPage: React.FC = () => {
   );
   const canAdmin    = userRoles.includes("Admin") || userRoles.includes("IT AirEuropa");
   const isProveedor = userRoles.includes("Proveedor") && !canAdmin;
+  // Botón "Nueva solicitud" en Inicio controlado por permiso RBAC REQUEST_CREATE
+  const { allowed: canCreateRequest } = usePermission("REQUEST_CREATE");
 
   // ── Datos brutos ──────────────────────────────────────
   const [allProjects,      setAllProjects]      = useState<Project[]>([]);
@@ -308,6 +311,7 @@ export const DashboardPage: React.FC = () => {
             workItems={allWorkItems}
             requests={requests}
             effectiveUserId={effectiveUserId}
+            canCreateRequest={canCreateRequest}
             onNavigate={goTo}
           />
 

@@ -186,6 +186,7 @@ $rbac_data = @(
     @{ key="TASK_CLOSE";       label="Cerrar tarea (desde EN_VALIDACION)"; group="TAREAS" },
     @{ key="TASK_REOPEN";      label="Reabrir tarea";                      group="TAREAS" },
     @{ key="TASK_VIEW_ALL";    label="Ver todas las tareas";               group="TAREAS" },
+    @{ key="PROJECT_CREATE";   label="Crear proyecto";                     group="TAREAS" },
     @{ key="REQUEST_CREATE";   label="Crear solicitudes";                  group="TAREAS" },
     @{ key="REQUEST_APPROVE";  label="Aprobar / gestionar solicitudes";    group="TAREAS" },
     @{ key="TRANS_NEW_PROG";   label="PENDIENTE -> EN CURSO";              group="TRANSICIONES" },
@@ -227,6 +228,7 @@ Write-Host "=== 7. Role Permissions ===" -ForegroundColor Cyan
 $rolePerms = @{
     "Admin" = @{
         TASK_CREATE=$true; TASK_EDIT=$true; TASK_CLOSE=$true; TASK_REOPEN=$true; TASK_VIEW_ALL=$true
+        PROJECT_CREATE=$true
         REQUEST_CREATE=$true; REQUEST_APPROVE=$true
         TRANS_NEW_PROG=$true; TRANS_PROG_RFT=$true; TRANS_RFT_TEST=$true; TRANS_TEST_CLS=$true; TRANS_BLOCK=$true; TRANS_UNBLOCK=$true
         VIEW_DASHBOARD=$true; VIEW_PROJECTS=$true; VIEW_ROADMAP=$true; VIEW_GANTT=$true; VIEW_REQUESTS=$true
@@ -235,6 +237,7 @@ $rolePerms = @{
     }
     "IT AirEuropa" = @{
         TASK_CREATE=$true; TASK_EDIT=$true; TASK_CLOSE=$true; TASK_REOPEN=$true; TASK_VIEW_ALL=$true
+        PROJECT_CREATE=$true
         REQUEST_CREATE=$true; REQUEST_APPROVE=$true
         TRANS_NEW_PROG=$true; TRANS_PROG_RFT=$true; TRANS_RFT_TEST=$true; TRANS_TEST_CLS=$true; TRANS_BLOCK=$true; TRANS_UNBLOCK=$true
         VIEW_DASHBOARD=$true; VIEW_PROJECTS=$true; VIEW_ROADMAP=$true; VIEW_GANTT=$true; VIEW_REQUESTS=$true
@@ -243,6 +246,7 @@ $rolePerms = @{
     }
     "Proveedor" = @{
         TASK_CREATE=$false; TASK_EDIT=$true; TASK_CLOSE=$false; TASK_REOPEN=$false; TASK_VIEW_ALL=$true
+        PROJECT_CREATE=$false
         REQUEST_CREATE=$false; REQUEST_APPROVE=$false
         TRANS_NEW_PROG=$true; TRANS_PROG_RFT=$true; TRANS_RFT_TEST=$false; TRANS_TEST_CLS=$false; TRANS_BLOCK=$true; TRANS_UNBLOCK=$true
         VIEW_DASHBOARD=$true; VIEW_PROJECTS=$true; VIEW_ROADMAP=$false; VIEW_GANTT=$false; VIEW_REQUESTS=$true
@@ -251,6 +255,7 @@ $rolePerms = @{
     }
     "Usuario" = @{
         TASK_CREATE=$false; TASK_EDIT=$false; TASK_CLOSE=$false; TASK_REOPEN=$false; TASK_VIEW_ALL=$true
+        PROJECT_CREATE=$false
         REQUEST_CREATE=$false; REQUEST_APPROVE=$false
         TRANS_NEW_PROG=$false; TRANS_PROG_RFT=$false; TRANS_RFT_TEST=$false; TRANS_TEST_CLS=$false; TRANS_BLOCK=$false; TRANS_UNBLOCK=$false
         VIEW_DASHBOARD=$true; VIEW_PROJECTS=$true; VIEW_ROADMAP=$true; VIEW_GANTT=$true; VIEW_REQUESTS=$true
@@ -259,6 +264,7 @@ $rolePerms = @{
     }
     "Invitado" = @{
         TASK_CREATE=$false; TASK_EDIT=$false; TASK_CLOSE=$false; TASK_REOPEN=$false; TASK_VIEW_ALL=$false
+        PROJECT_CREATE=$false
         REQUEST_CREATE=$false; REQUEST_APPROVE=$false
         TRANS_NEW_PROG=$false; TRANS_PROG_RFT=$false; TRANS_RFT_TEST=$false; TRANS_TEST_CLS=$false; TRANS_BLOCK=$false; TRANS_UNBLOCK=$false
         VIEW_DASHBOARD=$true; VIEW_PROJECTS=$true; VIEW_ROADMAP=$false; VIEW_GANTT=$false; VIEW_REQUESTS=$false

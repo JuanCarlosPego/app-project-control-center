@@ -30,8 +30,8 @@ import type { TenantUser } from "../types/domain";
 // Ver vite.config.ts → resolve.alias['@pa-bridge']
 import { executePluginAsync } from "@pa-bridge";
 
-/** true cuando corremos en vite dev (npm run dev) */
-const IS_LOCAL: boolean = import.meta.env.DEV;
+/** true SOLO cuando VITE_USE_MOCKS=true (entorno LOCAL). En cualquier build → false. */
+const IS_LOCAL: boolean = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  HELPERS INTERNOS

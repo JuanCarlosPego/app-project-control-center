@@ -7,6 +7,10 @@ import React from "react";
 import { AlertTriangle, Briefcase, Building2, UserCheck, User } from "lucide-react";
 import type { Project, BusinessArea, Provider } from "../../../types/domain";
 
+// ── Helper de fecha ───────────────────────────────────────────
+const fmtDate = (d?: string) =>
+  d ? new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
 // ── Tokens de color ────────────────────────────────────────
 export const STATUS_COLOR: Record<string, string> = {
   "En curso":  "#0078D4",
@@ -177,8 +181,8 @@ export const ProjectCard: React.FC<Props> = ({ project: p, area, provider, assig
 
       {/* Fechas */}
       <div style={{ display: "flex", gap: 12, fontSize: 10, color: "#8A8886" }}>
-        <span>📅 {p.startDate}</span>
-        <span>→ {p.endDate}</span>
+        <span>📅 {fmtDate(p.startDate)}</span>
+        <span>→ {fmtDate(p.endDate)}</span>
       </div>
 
       {/* Bloqueo */}

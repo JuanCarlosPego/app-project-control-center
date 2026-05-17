@@ -14,7 +14,7 @@
 // ─────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuth } from "../../auth/AuthContext";
+import { useEffectiveUser } from "../../auth/ImpersonationContext";
 import {
   getProjects,
   getBusinessAreas,
@@ -37,7 +37,7 @@ import type { ZoomLevel, GroupBy } from "./tokens";
 
 // ── RoadmapPage ───────────────────────────────────────────
 export const RoadmapPage: React.FC = () => {
-  const { roles } = useAuth();
+  const { roles } = useEffectiveUser();
 
   // ── Datos ─────────────────────────────────────────────
   const [allProjects,    setAllProjects]    = useState<Project[]>([]);
@@ -197,6 +197,7 @@ export const RoadmapPage: React.FC = () => {
         providers={providers}
         roles={roles}
         onClose={() => setSelectedProject(null)}
+        onProjectUpdated={() => { loadData(); }}
       />
     </div>
   );

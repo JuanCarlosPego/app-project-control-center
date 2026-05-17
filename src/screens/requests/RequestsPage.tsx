@@ -13,6 +13,7 @@ import { color, font, radius, shadow, spacing } from "../../components/ui/tokens
 import type { Request, Project, Team } from "../../types/domain";
 import type { AppUser } from "../../auth/ImpersonationContext";
 import { useEffectiveUser }  from "../../auth/ImpersonationContext";
+import { usePermission }     from "../../auth/usePermission";
 import { useAppFilter }      from "../../context/AppFilterContext";
 import { getProjects }       from "../../services/projectService";
 import { apiClient }         from "../../services/apiClient";
@@ -69,8 +70,8 @@ export const RequestsPage: React.FC = () => {
   const { user: effectiveUser, roles } = useEffectiveUser();  const { selectedYear, selectedAreaId, areas, selectedProjectId, projectsInScope } = useAppFilter();
   const isIT    = roles.includes("Admin") || roles.includes("IT AirEuropa");
   const canViewAll = isIT;
-  // Todos los roles autenticados pueden crear solicitudes (menos Invitado)
-  const canCreate = !roles.includes("Invitado");
+  // Botón "Nueva solicitud" controlado por permiso RBAC REQUEST_CREATE
+  const { allowed: canCreate } = usePermission("REQUEST_CREATE");
 
   const [searchParams] = useSearchParams();
 
@@ -101,7 +102,7 @@ export const RequestsPage: React.FC = () => {
       const [reqs, prjs, users, teamsRaw] = await Promise.all([
         getRequests({}),
         getProjects(),
-        apiClient.get<AppUser[]>("/appusers"),
+        apiClient.get<AppUser[]>("/app-users"),
         apiClient.get<Team[]>("/teams"),
       ]);
       setRequests(reqs);

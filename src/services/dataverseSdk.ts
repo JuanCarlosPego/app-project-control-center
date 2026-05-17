@@ -9,9 +9,9 @@
 //    lo pasa de forma transparente — sin MSAL ni popup.
 //
 //  REGLAS:
-//    1. IS_LOCAL = import.meta.env.DEV
-//       - true  → vite dev  (modo local con mocks — este archivo NO se invoca)
-//       - false → vite build (producción / pac code push → Dataverse real)
+//    1. IS_LOCAL = (VITE_USE_MOCKS === 'true')  ← fuente única de verdad
+//       - true  → LOCAL (.env)         → mocks MSW — este archivo NO se invoca
+//       - false → cualquier build      → Dataverse real (DEV / TEST / PROD)
 //
 //    2. Cola de escrituras (_writeQueue): serializa create/update/delete.
 //
@@ -23,8 +23,13 @@ import { getClient } from "@microsoft/power-apps/data";
 import type { IOperationOptions } from "@microsoft/power-apps/data";
 export { ALL_TABLES_DSI } from "./tableRegistry";
 
-/** True en vite dev, false en build de producción. */
-export const IS_LOCAL: boolean = import.meta.env.DEV;
+/**
+ * True SOLO cuando VITE_USE_MOCKS=true (.env LOCAL).
+ * En cualquier build (DEV / TEST / PROD) es false → Dataverse real.
+ * Fuente única de verdad: .env → VITE_USE_MOCKS=true
+ *                         .env.production → VITE_USE_MOCKS=false
+ */
+export const IS_LOCAL: boolean = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // ── Importar mapa de tablas ───────────────────────────────────────────────────
 import { ALL_TABLES_DSI as _TABLES } from "./tableRegistry";

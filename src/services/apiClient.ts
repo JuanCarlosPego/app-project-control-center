@@ -2,11 +2,12 @@
 //  src/services/apiClient.ts
 //  Cliente HTTP unificado.
 //
-//  IS_LOCAL = import.meta.env.DEV
-//    true  → vite dev  → fetch /api/* interceptado por MSW
-//    false → vite build → dvRequest() → Xrm.WebApi (Dataverse)
+//  IS_LOCAL = (VITE_USE_MOCKS === 'true')   ← fuente única de verdad
+//    true  → entorno LOCAL (npm run dev)  → fetch /api/* interceptado por MSW
+//    false → cualquier build (DEV/TEST/PROD) → dvRequest() → Xrm.WebApi (Dataverse)
 //
-//  No necesita VITE_USE_MOCKS ni .env.production.
+//  .env             → VITE_USE_MOCKS=true   (LOCAL)
+//  .env.production  → VITE_USE_MOCKS=false  (DEV / TEST / PROD)
 // ─────────────────────────────────────────────────────────
 
 import { dvRequest, IS_LOCAL } from "./dataverseBridge";
@@ -64,9 +65,9 @@ async function dvClientRequest<T>(
 }
 
 // ── Router: elige backend según contexto ───────────────────────────────────
-// IS_LOCAL es import.meta.env.DEV bakeado por Vite:
-//   vite dev   → DEV=true  → MSW / mocks locales
-//   vite build → DEV=false → Xrm.WebApi (Dataverse)
+// IS_LOCAL es VITE_USE_MOCKS bakeado por Vite en compile-time:
+//   .env (dev)        → VITE_USE_MOCKS=true  → MSW / mocks locales
+//   .env.production   → VITE_USE_MOCKS=false → Xrm.WebApi (Dataverse)
 function route<T>(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T> {
   if (!IS_LOCAL) {
     return dvClientRequest<T>(method, path, body);
