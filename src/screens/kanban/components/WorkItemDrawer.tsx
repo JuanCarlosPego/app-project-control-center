@@ -23,6 +23,8 @@ import {
 import {
   addJiraComment, retrySyncWorkItem,
 } from "../../../services/workItemService";
+import { getRequests } from "../../../services/requestService";
+import type { Request } from "../../../types/domain";
 import { KANBAN_COLUMNS, STATE_CHIP, SYNC_CHIP, PRIORITY_CHIP, TYPE_CHIP } from "../tokens";
 
 // ── Tipos ────────────────────────────────────────────────
@@ -107,6 +109,50 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     {children}
   </div>
 );
+
+// ── Origen: Solicitud ────────────────────────────────────
+const OriginRequestBlock: React.FC<{ requestId: string }> = ({ requestId }) => {
+  const [originReq, setOriginReq] = useState<Request | null>(null);
+
+  useEffect(() => {
+    getRequests({}).then(all => {
+      const found = all.find(r => r.id === requestId) ?? null;
+      setOriginReq(found);
+    }).catch(() => {/* silent */});
+  }, [requestId]);
+
+  if (!originReq) return null;
+
+  return (
+    <div style={{
+      marginTop: 16, padding: "10px 12px",
+      background: "#EFF6FF", border: "1px solid #C7E0F4",
+      borderRadius: 6,
+    }}>
+      <div style={{ fontSize: 10, color: "#605E5C", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>
+        Origen: Solicitud
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#201F1E", marginBottom: 4 }}>
+        {originReq.title}
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <span style={{
+          display: "inline-block", padding: "2px 8px", borderRadius: 99,
+          fontSize: 10, fontWeight: 700,
+          background: "#0078D422", color: "#0078D4",
+          border: "1px solid #0078D455",
+        }}>
+          {originReq.status}
+        </span>
+        {originReq.progressPct !== undefined && (
+          <span style={{ fontSize: 11, color: "#605E5C" }}>
+            {originReq.progressPct}% completada
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // ── Tab: Detalle ─────────────────────────────────────────
 const TabDetalle: React.FC<{
@@ -263,6 +309,11 @@ const TabDetalle: React.FC<{
         }}>
           No hay transiciones disponibles desde este estado para tu rol.
         </div>
+      )}
+
+      {/* ── Origen: Solicitud ─────────────────────────────── */}
+      {(item as WorkItem & { requestId?: string | null }).requestId && (
+        <OriginRequestBlock requestId={(item as WorkItem & { requestId?: string | null }).requestId!} />
       )}
     </div>
   );

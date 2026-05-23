@@ -61,7 +61,7 @@ const LABEL_STYLE: React.CSSProperties = {
 export const GlobalFilterBar: React.FC = () => {
   const {
     selectedYear, selectedAreaId, selectedProjectId,
-    areas, projectsInScope,
+    areas, visibleAreas, projectsInScope,
     setYear, setArea, setProject, resetFilters,
   } = useAppFilter();
 
@@ -145,7 +145,7 @@ export const GlobalFilterBar: React.FC = () => {
           style={SEL}
         >
           <option value="">Todas las áreas</option>
-          {areas.map((a) => (
+          {visibleAreas.map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
           ))}
         </select>

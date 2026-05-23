@@ -27,7 +27,6 @@ import { RequestsFilters, EMPTY_REQUEST_FILTERS } from "./components/RequestsFil
 import { RequestsTable }       from "./components/RequestsTable";
 import { RequestDrawer }       from "./components/RequestDrawer";
 import { NewRequestModal }     from "./components/NewRequestModal";
-import { ConvertToWorkItemModal } from "./components/ConvertToWorkItemModal";
 
 // ── KPI Mini Card ─────────────────────────────────────────
 const KpiCard: React.FC<{
@@ -91,7 +90,6 @@ export const RequestsPage: React.FC = () => {
   const [error,        setError]        = useState<string | null>(null);
   const [selected,     setSelected]     = useState<Request | null>(null);
   const [showNew,      setShowNew]      = useState(false);
-  const [showConvert,  setShowConvert]  = useState(false);
   const [kpiStatus,    setKpiStatus]    = useState<string | null>(null);
 
   // ── Carga ─────────────────────────────────────────────
@@ -328,11 +326,12 @@ export const RequestsPage: React.FC = () => {
           appUsers={appUsers}
           teams={teams}
           projects={projects}
+          fullProjects={fullProjects}
+          businessAreas={areas}
           currentUser={effectiveUser}
           roles={roles}
           onClose={() => setSelected(null)}
           onRefresh={() => void handleRefresh()}
-          onConvert={() => setShowConvert(true)}
         />
       )}
 
@@ -342,27 +341,14 @@ export const RequestsPage: React.FC = () => {
           currentUser={effectiveUser}
           teams={teams}
           allProjects={fullProjects}
+          businessAreas={areas}
           selectedYear={selectedYear}
           onCreated={() => { setShowNew(false); void load(); }}
           onClose={() => setShowNew(false)}
         />
       )}
 
-      {/* ── Modal convertir en tarea ── */}
-      {showConvert && selected && (
-        <ConvertToWorkItemModal
-          request={selected}
-          allProjects={fullProjects}
-          selectedYear={selectedYear}
-          appUsers={appUsers}
-          teams={teams}
-          onConverted={() => {
-            setShowConvert(false);
-            void handleRefresh();
-          }}
-          onClose={() => setShowConvert(false)}
-        />
-      )}
+
     </div>
   );
 };

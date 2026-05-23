@@ -19,16 +19,17 @@
 import type {
   AppRole, BusinessArea, Project, WorkItem, State, Transition,
   Team, Provider, Evidence, ActivityLogEntry, Risk, Request,
+  RequestAttachment,
   AppUser, User, SystemSettings, WipLimits, RbacPermission,
   RolePermissionsMap, AdminAuditEntry, PermissionProfile,
   ProfilePermission, UserProfile, UserPermissionOverride,
   EffectivePermissions, DeliveryOwnerType, TeamType,
   ProjectStatus, WorkItemType, Priority, EvidenceType,
   RiskSeverity, RiskStatus, SyncStatus, VisibilityMode,
-  RequestType, RequestStatus, AuditEntry, AuditEntityType,
+  RequestType, RequestStatus, RequestUrgency, AuditEntry, AuditEntityType,
 } from "../types/domain";
 
-import { sdkGet, sdkGetOne, sdkCreate, sdkUpdate, sdkDelete, IS_LOCAL } from "./dataverseSdk";
+import { sdkGet, sdkGetOne, sdkCreate, sdkUpdate, sdkDelete, sdkUploadFile, IS_LOCAL } from "./dataverseSdk";
 import { searchTenantUsersViaOffice365 } from "./office365Connector";
 export { IS_LOCAL };
 
@@ -140,12 +141,14 @@ const SEL = {
                 "_cproroad_projectid_value,_cproroad_assignedtouserid_value," +
                 "_cproroad_linkedworkitemid_value,_cproroad_createdbyuserid_value," +
                 "_cproroad_closedbyuserid_value,createdon",
+  // NOTA: cproroad_urgency se omite hasta que la columna esté publicada en Dataverse
+  // (Make.powerapps.com → Soluciones → Publicar todas las personalizaciones)
   request:      "$select=cproroad_requestid,cproroad_name,cproroad_year," +
                 "cproroad_description,cproroad_type,cproroad_priority,cproroad_status," +
                 "cproroad_triagenote,cproroad_cancelednote,createdon,modifiedon," +
                 "_cproroad_requestedbyuserid_value,_cproroad_requestedbyteamid_value," +
                 "_cproroad_relatedprojectid_value,_cproroad_triageowneruserid_value," +
-                "_cproroad_convertedworkitemid_value",
+                "_cproroad_convertedworkitemid_value,_cproroad_businessareaid_value",
   permProfile:  "$select=cproroad_permissionprofileid,cproroad_name," +
                 "cproroad_label,cproroad_description,cproroad_isactive",
   profPerm:     "$select=cproroad_profilepermissionid,cproroad_name," +
@@ -501,6 +504,9 @@ function dvToRisk(r: any): Risk {
 }
 
 function dvToRequest(r: any, userMap: Map<string, AppUser>): Request {
+  const URGENCY_F: Record<number, RequestUrgency> = {
+    100000000: "inmediato", 100000001: "semana", 100000002: "mes", 100000003: "backlog",
+  };
   const uid = lookup(r, "cproroad_requestedbyuserid") ?? "";
   return {
     id:    id(r, "cproroad_requestid"),
@@ -509,6 +515,10 @@ function dvToRequest(r: any, userMap: Map<string, AppUser>): Request {
     description: r.cproroad_description ?? "",
     type:     choice(r, "cproroad_type",     REQTYPE_F, "Consulta"),
     priority: choice(r, "cproroad_priority", PRI_F,     "Media"),
+    urgency:  r.cproroad_urgency != null
+      ? (URGENCY_F[r.cproroad_urgency] ?? undefined)
+      : undefined,
+    businessAreaId: lookup(r, "cproroad_businessareaid") ?? null,
     requestedByUserId: uid,
     requestedByRole:   userMap.get(uid)?.role ?? "Usuario",
     requestedByTeamId: lookup(r, "cproroad_requestedbyteamid"),
@@ -1332,6 +1342,12 @@ export async function dvRequest<T>(
   if (method === "POST" && match(base, "/requests")) {
     const userMap = await loadUsers();
     const b = body as any;
+
+    // Mapeo urgencia → choice value
+    const URGENCY_T: Record<string, number> = {
+      inmediato: 100000000, semana: 100000001, mes: 100000002, backlog: 100000003,
+    };
+
     const dv: Record<string, any> = {
       cproroad_name:        b.title,
       cproroad_description: b.description ?? "",
@@ -1340,9 +1356,12 @@ export async function dvRequest<T>(
       cproroad_priority:    PRI_T[b.priority as Priority],
       cproroad_status:      REQST_T["Nuevo"],
     };
+    if (b.urgency && URGENCY_T[b.urgency] !== undefined)
+      dv.cproroad_urgency = URGENCY_T[b.urgency];
     if (b.requestedByUserId) dv[`cproroad_requestedbyuserid@odata.bind`]  = bind(E.appUser + "s", b.requestedByUserId);
     if (b.requestedByTeamId) dv[`cproroad_requestedbyteamid@odata.bind`]  = bind(E.team + "s", b.requestedByTeamId);
     if (b.relatedProjectId)  dv[`cproroad_relatedprojectid@odata.bind`]   = bind(E.project + "s", b.relatedProjectId);
+    if (b.businessAreaId)    dv[`cproroad_businessareaid@odata.bind`]      = bind("cproroad_businessareas", b.businessAreaId);
     const created = await api.createRecord(E.request, dv);
     const r = await api.retrieveRecord(E.request, created.id, `?${SEL.request}`);
     return dvToRequest(r, userMap) as unknown as T;
@@ -1351,15 +1370,22 @@ export async function dvRequest<T>(
   if (method === "PATCH" && (params = match(base, "/requests/:id"))) {
     const userMap = await loadUsers();
     const b = body as any;
+    const URGENCY_T: Record<string, number> = {
+      inmediato: 100000000, semana: 100000001, mes: 100000002, backlog: 100000003,
+    };
     const dv: Record<string, any> = {};
     if (b.title       !== undefined) dv.cproroad_name        = b.title;
     if (b.description !== undefined) dv.cproroad_description = b.description;
     if (b.type        !== undefined) dv.cproroad_type        = REQTYPE_T[b.type as RequestType];
     if (b.priority    !== undefined) dv.cproroad_priority    = PRI_T[b.priority as Priority];
+    if (b.urgency     !== undefined)
+      dv.cproroad_urgency = b.urgency ? (URGENCY_T[b.urgency] ?? null) : null;
     if (b.relatedProjectId !== undefined)
       dv[`cproroad_relatedprojectid@odata.bind`] = bind(E.project + "s", b.relatedProjectId);
+    if (b.businessAreaId !== undefined && b.businessAreaId)
+      dv[`cproroad_businessareaid@odata.bind`] = bind("cproroad_businessareas", b.businessAreaId);
     await api.updateRecord(E.request, params.id, dv);
-    const r = await api.retrieveRecord(E.request, created.id ?? params.id, `?${SEL.request}`);
+    const r = await api.retrieveRecord(E.request, params.id, `?${SEL.request}`);
     return dvToRequest(r, userMap) as unknown as T;
   }
 
@@ -1426,6 +1452,56 @@ export async function dvRequest<T>(
     });
     const r = await api.retrieveRecord(E.request, params.id, `?${SEL.request}`);
     return dvToRequest(r, userMap) as unknown as T;
+  }
+
+  // ── Adjuntos de solicitud ──────────────────────────────
+  // POST /requests/:id/attachments → crea registro cproroad_requestattachment + sube archivo
+  if (method === "POST" && (params = match(base, "/requests/:id/attachments"))) {
+    const currentUser = _effectiveUser;
+    const b = body as { name: string; mimeType: string; sizeBytes: number; file: File };
+    const dvAtt: Record<string, any> = {
+      cproroad_name:       b.name,
+      cproroad_mimetype:   b.mimeType,
+      cproroad_sizebytes:  b.sizeBytes,
+    };
+    dvAtt[`cproroad_requestid@odata.bind`] = bind(E.request + "s", params.id);
+    if (currentUser) dvAtt[`cproroad_uploadedbyuserid@odata.bind`] = bind(E.appUser + "s", currentUser.id);
+    const created = await api.createRecord("cproroad_requestattachment", dvAtt);
+    // Subir contenido binario a la columna File de Dataverse
+    if (b.file) {
+      const arrayBuffer = await b.file.arrayBuffer();
+      await sdkUploadFile("cproroad_requestattachment", created.id, "cproroad_contenidoarchivo", b.name, arrayBuffer);
+    }
+    const att: RequestAttachment = {
+      id:         created.id,
+      requestId:  params.id,
+      name:       b.name,
+      mimeType:   b.mimeType,
+      sizeBytes:  b.sizeBytes,
+      url:        "",
+      uploadedBy: currentUser?.id ?? "",
+      uploadedOn: new Date().toISOString(),
+    };
+    return att as unknown as T;
+  }
+
+  // GET /requests/:id/attachments → recupera metadatos de adjuntos (sin contenido binario)
+  if (method === "GET" && (params = match(base, "/requests/:id/attachments"))) {
+    const res = await api.retrieveMultipleRecords(
+      "cproroad_requestattachment",
+      `?$filter=_cproroad_requestid_value eq '${params.id}'&$select=cproroad_requestattachmentid,cproroad_name,cproroad_mimetype,cproroad_sizebytes,_cproroad_requestid_value,_cproroad_uploadedbyuserid_value,createdon`,
+    );
+    const list: RequestAttachment[] = res.entities.map((a: any) => ({
+      id:         a.cproroad_requestattachmentid,
+      requestId:  params!.id,
+      name:       a.cproroad_name ?? "",
+      mimeType:   a.cproroad_mimetype ?? "",
+      sizeBytes:  a.cproroad_sizebytes ?? 0,
+      url:        "",
+      uploadedBy: a._cproroad_uploadedbyuserid_value ?? "",
+      uploadedOn: a.createdon ?? "",
+    }));
+    return list as unknown as T;
   }
 
   if (method === "DELETE" && (params = match(base, "/requests/:id"))) {

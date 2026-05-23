@@ -6,14 +6,15 @@
 //
 //  RBAC acciones:
 //  - Propietario: EDITAR (Nuevo|Info req.), CANCELAR (Nuevo|Info req.|En rev.), RESPONDER (Info req.)
-//  - IT/Admin   : TRIAGE + CONVERTIR EN TAREA (si Aprobada)
+//  - IT/Admin   : TRIAGE (convierte en tareas desde el wizard de triage)
 //  - Cancelada  : solo lectura (IT puede ver todo)
 // ─────────────────────────────────────────────────────────
 
 import React, { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowRightCircle, CheckCircle, HelpCircle,
-         MessageSquare, Send, Trash2, X, XCircle } from "lucide-react";
-import type { Request, RequestType, Priority, Team } from "../../../types/domain";
+import { AlertTriangle, ArrowRightCircle, CheckCircle, File, FileText,
+         HelpCircle, Image as ImageIcon, MessageSquare, Paperclip, Plus,
+         Send, Trash2, X, XCircle } from "lucide-react";
+import type { Request, RequestType, RequestUrgency, Priority, Team, BusinessArea, RequestAttachment, Project, WorkItem } from "../../../types/domain";
 import type { AppUser } from "../../../auth/ImpersonationContext";
 import type { AppRole } from "../../../types/domain";
 import {
@@ -26,20 +27,27 @@ import {
   patchRequest,
   cancelRequest,
   respondRequest,
+  getRequestAttachments,
+  downloadAttachmentFile,
+  deleteRequestAttachment,
+  uploadRequestAttachment,
   type PatchRequestPayload,
 } from "../../../services/requestService";
+import { getRequestTasks } from "../../../services/requestProgressService";
+import { TriageWizardModal } from "./TriageWizardModal";
 
 // ── Props ─────────────────────────────────────────────────
 interface Props {
-  request:     Request;
-  appUsers:    AppUser[];
-  teams:       Team[];
-  projects:    Array<{ id: string; name: string }>;
-  currentUser: AppUser;
-  roles:       AppRole[];
-  onClose:     () => void;
-  onRefresh:   () => void;
-  onConvert:   () => void;
+  request:       Request;
+  appUsers:      AppUser[];
+  teams:         Team[];
+  projects:      Array<{ id: string; name: string }>;
+  fullProjects?: Project[];
+  businessAreas: BusinessArea[];
+  currentUser:   AppUser;
+  roles:         AppRole[];
+  onClose:       () => void;
+  onRefresh:     () => void;
 }
 
 type Tab = "detail" | "triage" | "history";
@@ -140,8 +148,8 @@ const InlineToast: React.FC<{ toast: ToastState }> = ({ toast }) => (
 
 // ── Componente principal ──────────────────────────────────
 export const RequestDrawer: React.FC<Props> = ({
-  request, appUsers, teams, projects,
-  currentUser, roles, onClose, onRefresh, onConvert,
+  request, appUsers, teams, projects, fullProjects = [], businessAreas,
+  currentUser, roles, onClose, onRefresh,
 }) => {
   const isIT    = roles.includes("Admin") || roles.includes("IT AirEuropa");
   const isOwner = request.requestedByUserId === currentUser.id;
@@ -151,18 +159,34 @@ export const RequestDrawer: React.FC<Props> = ({
   const canCancel  = isOwner && !isIT && ["Nuevo", "Info requerida", "En revisión"].includes(request.status);
   const canRespond = isOwner && !isIT && request.status === "Info requerida";
   const canTriage  = isIT && !isClosed;
-  const canConvert = isIT && request.status === "Aprobada";
 
   // ── State ─────────────────────────────────────────────
   const [tab, setTab]             = useState<Tab>("detail");
   const [editMode, setEditMode]   = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);
+  const [showTriageWizard, setShowTriageWizard] = useState(false);
 
   // Edit fields
-  const [editTitle, setEditTitle]     = useState(request.title);
-  const [editDesc,  setEditDesc]      = useState(request.description);
-  const [editType,  setEditType]      = useState<RequestType>(request.type);
-  const [editPrio,  setEditPrio]      = useState<Priority>(request.priority);
+  const [editTitle,   setEditTitle]   = useState(request.title);
+  const [editDesc,    setEditDesc]    = useState(request.description);
+  const [editType,    setEditType]    = useState<RequestType>(request.type);
+  const [editPrio,    setEditPrio]    = useState<Priority>(request.priority);
+  const [editUrgency, setEditUrgency] = useState<RequestUrgency | "">(request.urgency ?? "");
+  const [editAreaId,  setEditAreaId]  = useState<string>(request.businessAreaId ?? "");
+
+  // Adjuntos cargados al abrir el drawer
+  const [attachments,  setAttachments]  = useState<RequestAttachment[]>([]);
+  const [loadingAtts,  setLoadingAtts]  = useState(false);
+
+  // Tareas asociadas (1:N desde solicitud)
+  const [requestTasks, setRequestTasks] = useState<WorkItem[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+
+  // Gestión de adjuntos en modo edición
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
+  const [pendingNewFiles,  setPendingNewFiles]  = useState<Array<{
+    file: File; name: string; mimeType: string; sizeBytes: number; dataUrl: string;
+  }>>([]); 
 
   // Respond fields
   const [respondNote, setRespondNote] = useState("");
@@ -182,6 +206,15 @@ export const RequestDrawer: React.FC<Props> = ({
     user:    new Map(appUsers.map(u => [u.id, u.displayName])),
     team:    new Map(teams.map(t => [t.id, t.name])),
     project: new Map(projects.map(p => [p.id, p.name])),
+    area:    new Map(businessAreas.map(a => [a.id, a.name])),
+  };
+
+  // Etiquetas de urgencia
+  const URGENCY_LABELS: Record<RequestUrgency, string> = {
+    inmediato: "🚨 Inmediato (bloqueo crítico)",
+    semana:    "⚡ Esta semana (impacto significativo)",
+    mes:       "📅 Este mes (planificable)",
+    backlog:   "🗂️ Backlog (sin presión de tiempo)",
   };
 
   // ── Toast helper ──────────────────────────────────────
@@ -192,17 +225,65 @@ export const RequestDrawer: React.FC<Props> = ({
   }
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
+  // Cargar adjuntos al montar el drawer
+  useEffect(() => {
+    setLoadingAtts(true);
+    getRequestAttachments(request.id)
+      .then(setAttachments)
+      .catch(() => setAttachments([]))
+      .finally(() => setLoadingAtts(false));
+  }, [request.id]);
+
+  // Cargar tareas asociadas (si tiene progress o está en estado de ejecución)
+  useEffect(() => {
+    if (!request.tasksTotal && request.status !== "En ejecución" && request.status !== "Resuelta") return;
+    setLoadingTasks(true);
+    getRequestTasks(request.id)
+      .then(setRequestTasks)
+      .catch(() => setRequestTasks([]))
+      .finally(() => setLoadingTasks(false));
+  }, [request.id, request.status, request.tasksTotal]);
+
   // ── Acciones ──────────────────────────────────────────
   async function handleEdit() {
     setSaving(true);
     try {
       const payload: PatchRequestPayload = {
-        title:       editTitle.trim() || undefined,
-        description: editDesc.trim(),
-        type:        editType,
-        priority:    editPrio,
+        title:          editTitle.trim() || undefined,
+        description:    editDesc.trim(),
+        type:           editType,
+        priority:       editPrio,
+        urgency:        editUrgency || null,
+        businessAreaId: editAreaId  || null,
       };
       await patchRequest(request.id, payload);
+
+      // Procesar adjuntos: eliminar marcados
+      if (pendingDeleteIds.size > 0) {
+        await Promise.all(
+          [...pendingDeleteIds].map(id => deleteRequestAttachment(request.id, id)),
+        );
+      }
+      // Procesar adjuntos: subir nuevos
+      if (pendingNewFiles.length > 0) {
+        await Promise.all(
+          pendingNewFiles.map(f =>
+            uploadRequestAttachment(request.id, {
+              name:      f.name,
+              mimeType:  f.mimeType,
+              sizeBytes: f.sizeBytes,
+              file:      f.file,
+              dataUrl:   f.dataUrl,
+            }),
+          ),
+        );
+      }
+      // Recargar adjuntos
+      const updated = await getRequestAttachments(request.id);
+      setAttachments(updated);
+      setPendingDeleteIds(new Set());
+      setPendingNewFiles([]);
+
       showToast("Solicitud actualizada correctamente.", true);
       setEditMode(false);
       onRefresh();
@@ -442,6 +523,20 @@ export const RequestDrawer: React.FC<Props> = ({
                 : <em style={{ color: "#8A8886" }}>Sin descripción.</em>}
             </FLD>
 
+            {/* Urgencia */}
+            {request.urgency && (
+              <FLD label="Urgencia">
+                {URGENCY_LABELS[request.urgency]}
+              </FLD>
+            )}
+
+            {/* Área de negocio */}
+            {request.businessAreaId && (
+              <FLD label="Área de negocio">
+                {maps.area.get(request.businessAreaId) ?? request.businessAreaId}
+              </FLD>
+            )}
+
             {/* Solicitante */}
             <FLD label="Solicitado por">
               <span>
@@ -483,6 +578,150 @@ export const RequestDrawer: React.FC<Props> = ({
                 <span><strong>Convertida en tarea:</strong> {request.convertedWorkItemId}</span>
               </div>
             )}
+
+            {/* ── Tareas asociadas (bloque de progreso) ── */}
+            {(request.status === "En ejecución" || request.status === "Resuelta" || (request.tasksTotal ?? 0) > 0) && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 10, color: "#8A8886", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>
+                  Tareas asociadas
+                </div>
+
+                {/* Barra de progreso */}
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: request.status === "Resuelta" ? "#107C10" : "#0078D4" }}>
+                      {request.progressPct ?? 0}%
+                    </span>
+                    <span style={{ fontSize: 11, color: "#8A8886" }}>
+                      {request.tasksDone ?? 0} / {request.tasksTotal ?? 0} cerradas
+                    </span>
+                  </div>
+                  <div style={{ height: 8, background: "#EDEBE9", borderRadius: 4, overflow: "hidden" }}>
+                    <div style={{
+                      height: "100%",
+                      width: `${request.progressPct ?? 0}%`,
+                      background: request.status === "Resuelta" ? "#107C10" : "#0078D4",
+                      borderRadius: 4,
+                      transition: "width 400ms ease",
+                    }} />
+                  </div>
+                  {request.status === "Resuelta" && (
+                    <div style={{ marginTop: 4, fontSize: 11, color: "#107C10", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                      <CheckCircle size={11} /> Resuelta automáticamente al cerrar todas las tareas
+                    </div>
+                  )}
+                </div>
+
+                {/* Tabla de tareas */}
+                {loadingTasks ? (
+                  <span style={{ fontSize: 12, color: "#8A8886" }}>Cargando tareas…</span>
+                ) : requestTasks.length === 0 ? (
+                  <span style={{ fontSize: 12, color: "#8A8886" }}>Sin tareas asociadas.</span>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {requestTasks.map(task => {
+                      const isClosed = task.stateId === "st-cls";
+                      return (
+                        <div key={task.id} style={{
+                          display: "grid",
+                          gridTemplateColumns: "auto 1fr auto",
+                          gap: "6px 10px",
+                          padding: "8px 10px",
+                          border: "1px solid #EDEBE9",
+                          borderRadius: 6,
+                          background: isClosed ? "#F3FCF0" : "#FAFAFA",
+                          alignItems: "center",
+                        }}>
+                          {/* Badge estado */}
+                          <span style={{
+                            display: "inline-block", padding: "1px 7px", borderRadius: 99,
+                            fontSize: 10, fontWeight: 700,
+                            background: isClosed ? "#107C1022" : "#0078D422",
+                            color: isClosed ? "#107C10" : "#0078D4",
+                            border: `1px solid ${isClosed ? "#107C1055" : "#0078D455"}`,
+                            whiteSpace: "nowrap",
+                          }}>
+                            {isClosed ? "Cerrada" : "En curso"}
+                          </span>
+                          {/* Título */}
+                          <span style={{ fontSize: 12, color: "#201F1E", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {task.title}
+                          </span>
+                          {/* ID */}
+                          <span style={{ fontSize: 10, color: "#8A8886", whiteSpace: "nowrap" }}>
+                            {task.id}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Adjuntos */}
+            <div style={{ marginTop: 4 }}>
+              <div style={{ fontSize: 10, color: "#8A8886", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>
+                Adjuntos
+              </div>
+              {loadingAtts ? (
+                <span style={{ fontSize: 12, color: "#8A8886" }}>Cargando adjuntos…</span>
+              ) : attachments.length === 0 ? (
+                <span style={{ fontSize: 12, color: "#8A8886", display: "flex", alignItems: "center", gap: 5 }}>
+                  <Paperclip size={12} /> Sin adjuntos
+                </span>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {attachments.map(att => (
+                    <div key={att.id} style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      padding: "6px 10px", border: "1px solid #EDEBE9",
+                      borderRadius: 6, background: "#FAFAFA",
+                    }}>
+                      {att.mimeType.startsWith("image/") && att.url.startsWith("data:") ? (
+                        <img
+                          src={att.url}
+                          alt={att.name}
+                          style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 3, flexShrink: 0 }}
+                        />
+                      ) : (
+                        <div style={{
+                          width: 32, height: 32, borderRadius: 3, background: "#EFF6FC",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          color: "#0078D4", flexShrink: 0,
+                        }}>
+                          {att.mimeType === "application/pdf" ? <FileText size={14} /> : att.mimeType.startsWith("image/") ? <ImageIcon size={14} /> : <File size={14} />}
+                        </div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "#201F1E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {att.name}
+                        </div>
+                        <div style={{ fontSize: 10, color: "#8A8886" }}>
+                          {att.sizeBytes > 0 ? `${(att.sizeBytes / 1024).toFixed(0)} KB` : ""}
+                        </div>
+                      </div>
+                      {att.url.startsWith("data:") ? (
+                        <a
+                          href={att.url}
+                          download={att.name}
+                          style={{ fontSize: 11, color: "#0078D4", textDecoration: "none", whiteSpace: "nowrap" }}
+                        >
+                          Descargar
+                        </a>
+                      ) : (
+                        <button
+                          onClick={() => downloadAttachmentFile(att)}
+                          style={{ fontSize: 11, color: "#0078D4", background: "none", border: "none", cursor: "pointer", whiteSpace: "nowrap", padding: 0 }}
+                        >
+                          Descargar
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         )}
 
@@ -498,7 +737,7 @@ export const RequestDrawer: React.FC<Props> = ({
 
             <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#605E5C" }}>
               Título
-              <input type="text" value={editTitle} onChange={e => setEditTitle(e.target.value)} style={{ ...INPUT }} maxLength={200} />
+              <input type="text" value={editTitle} onChange={e => setEditTitle(e.target.value)} style={{ ...INPUT }} maxLength={150} />
             </label>
 
             <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#605E5C" }}>
@@ -525,14 +764,234 @@ export const RequestDrawer: React.FC<Props> = ({
                 </select>
               </label>
             </div>
+
+            {/* Área de negocio */}
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#605E5C" }}>
+              Área de negocio
+              <select value={editAreaId} onChange={e => setEditAreaId(e.target.value)}
+                style={{ ...INPUT, appearance: "auto" as React.CSSProperties["appearance"] }}>
+                <option value="">Sin área específica</option>
+                {businessAreas.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </label>
+
+            {/* Urgencia */}
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#605E5C" }}>
+              Urgencia
+              <select value={editUrgency} onChange={e => setEditUrgency(e.target.value as RequestUrgency | "")}
+                style={{ ...INPUT, appearance: "auto" as React.CSSProperties["appearance"] }}>
+                <option value="">Sin especificar</option>
+                <option value="inmediato">🚨 Inmediato (bloqueo crítico)</option>
+                <option value="semana">⚡ Esta semana (impacto significativo)</option>
+                <option value="mes">📅 Este mes (planificable)</option>
+                <option value="backlog">🗂️ Backlog (sin presión de tiempo)</option>
+              </select>
+            </label>
+
+            {/* ── Adjuntos en modo edición ── */}
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#605E5C", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
+                <Paperclip size={11} /> Adjuntos
+              </div>
+
+              {/* Lista existentes (minus pendientes de borrado) */}
+              {loadingAtts ? (
+                <p style={{ fontSize: 12, color: "#8A8886", margin: "0 0 8px" }}>Cargando…</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 }}>
+                  {attachments
+                    .filter(a => !pendingDeleteIds.has(a.id))
+                    .map(att => {
+                      const isPdf   = att.mimeType === "application/pdf";
+                      const isImage = att.mimeType.startsWith("image/");
+                      return (
+                        <div key={att.id} style={{
+                          display: "flex", alignItems: "center", gap: 7,
+                          padding: "5px 8px", border: "1px solid #EDEBE9",
+                          borderRadius: 5, background: "#FAFAFA", fontSize: 12,
+                        }}>
+                          <span style={{ color: isPdf ? "#986F0B" : isImage ? "#0078D4" : "#8A8886", display: "flex", flexShrink: 0 }}>
+                            {isPdf ? <FileText size={13} /> : isImage ? <ImageIcon size={13} /> : <File size={13} />}
+                          </span>
+                          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#201F1E" }}>
+                            {att.name}
+                          </span>
+                          {att.sizeBytes > 0 && (
+                            <span style={{ fontSize: 10, color: "#8A8886", flexShrink: 0 }}>
+                              {(att.sizeBytes / 1024).toFixed(0)} KB
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            title="Eliminar adjunto"
+                            onClick={() => setPendingDeleteIds(prev => new Set([...prev, att.id]))}
+                            style={{
+                              background: "none", border: "none", cursor: "pointer",
+                              color: "#D13438", padding: 2, display: "flex", alignItems: "center",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  {attachments.filter(a => !pendingDeleteIds.has(a.id)).length === 0 &&
+                    pendingNewFiles.length === 0 && (
+                    <p style={{ fontSize: 12, color: "#8A8886", margin: 0, fontStyle: "italic" }}>Sin adjuntos.</p>
+                  )}
+                </div>
+              )}
+
+              {/* Nuevos adjuntos pendientes de subir */}
+              {pendingNewFiles.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 }}>
+                  {pendingNewFiles.map((f, i) => (
+                    <div key={i} style={{
+                      display: "flex", alignItems: "center", gap: 7,
+                      padding: "5px 8px",
+                      border: "1px dashed #C7E0F4",
+                      borderRadius: 5, background: "#EFF6FC", fontSize: 12,
+                    }}>
+                      <span style={{ color: "#0078D4", display: "flex", flexShrink: 0 }}>
+                        {f.mimeType === "application/pdf" ? <FileText size={13} /> : f.mimeType.startsWith("image/") ? <ImageIcon size={13} /> : <File size={13} />}
+                      </span>
+                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#201F1E" }}>
+                        {f.name}
+                      </span>
+                      <span style={{ fontSize: 10, color: "#005A9E", fontWeight: 600, flexShrink: 0 }}>nuevo</span>
+                      {f.sizeBytes > 0 && (
+                        <span style={{ fontSize: 10, color: "#8A8886", flexShrink: 0 }}>
+                          {(f.sizeBytes / 1024).toFixed(0)} KB
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        title="Quitar"
+                        onClick={() => setPendingNewFiles(prev => prev.filter((_, j) => j !== i))}
+                        style={{
+                          background: "none", border: "none", cursor: "pointer",
+                          color: "#D13438", padding: 2, display: "flex", alignItems: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Botón añadir archivo */}
+              <label style={{
+                display: "inline-flex", alignItems: "center", gap: 5,
+                padding: "5px 12px",
+                border: "1px dashed #C8C6C4", borderRadius: 5,
+                cursor: "pointer", fontSize: 12, color: "#0078D4",
+                background: "transparent",
+                fontFamily: "'Segoe UI', sans-serif",
+              }}>
+                <Plus size={12} /> Añadir archivo
+                <input
+                  type="file"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={e => {
+                    const files = Array.from(e.target.files ?? []);
+                    files.forEach(file => {
+                      const reader = new FileReader();
+                      reader.onload = ev => {
+                        setPendingNewFiles(prev => [...prev, {
+                          file,
+                          name:      file.name,
+                          mimeType:  file.type || "application/octet-stream",
+                          sizeBytes: file.size,
+                          dataUrl:   (ev.target?.result as string) ?? "",
+                        }]);
+                      };
+                      reader.readAsDataURL(file);
+                    });
+                    e.target.value = ""; // reset para poder subir el mismo archivo de nuevo
+                  }}
+                />
+              </label>
+
+              {(pendingDeleteIds.size > 0 || pendingNewFiles.length > 0) && (
+                <p style={{ margin: "6px 0 0", fontSize: 11, color: "#986F0B" }}>
+                  ⚠️ Los cambios de adjuntos se aplican al guardar.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
         {/* ══ TAB: TRIAGE (solo IT) ══ */}
         {tab === "triage" && isIT && (
           <>
-            {/* Nota actual guardada */}
-            {request.triageNote && !canTriage && (
+            {/* Resumen de triage guardado */}
+            {(request.triageDecision || request.triageNote || request.triageCategory) && (
+              <div style={{
+                padding: "12px 14px", marginBottom: 16,
+                background: "#F3F9FF", border: "1px solid #C7E0F4",
+                borderRadius: 8, fontSize: 12, color: "#201F1E",
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 8, color: "#005A9E" }}>
+                  📋 Triage registrado
+                </div>
+                {request.triageDecision && (
+                  <div style={{ marginBottom: 4 }}>
+                    <span style={{ color: "#8A8886", marginRight: 4 }}>Decisión:</span>
+                    <strong>{{
+                      "approve-backlog": "Aprobar → Backlog",
+                      "convert":         "Convertir en tarea",
+                      "request-info":    "Pedir información",
+                      "reject":          "Rechazar",
+                    }[request.triageDecision] ?? request.triageDecision}</strong>
+                  </div>
+                )}
+                {request.triageCategory && (
+                  <div style={{ marginBottom: 4 }}>
+                    <span style={{ color: "#8A8886", marginRight: 4 }}>Categoría:</span>
+                    {request.triageCategory}
+                    {request.triagePriorityIT && <span style={{ marginLeft: 8, color: "#8A8886" }}>· Prioridad IT: <strong>{request.triagePriorityIT}</strong></span>}
+                    {request.triageEstimate && <span style={{ marginLeft: 8, color: "#8A8886" }}>· Estimación: <strong>{request.triageEstimate}</strong></span>}
+                  </div>
+                )}
+                {request.triageBacklogBucket && (
+                  <div style={{ marginBottom: 4 }}>
+                    <span style={{ color: "#8A8886", marginRight: 4 }}>Bucket backlog:</span>
+                    {request.triageBacklogBucket}
+                  </div>
+                )}
+                {request.triageReason && (
+                  <div style={{ marginBottom: 4 }}>
+                    <span style={{ color: "#8A8886", marginRight: 4 }}>Motivo rechazo:</span>
+                    {request.triageReason}
+                  </div>
+                )}
+                {request.triageNote && (
+                  <div style={{ marginTop: 6, padding: "8px 10px", background: "#fff", borderRadius: 5, border: "1px solid #EDEBE9", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                    {request.triageNote}
+                  </div>
+                )}
+                {request.triageOwnerUserId && (
+                  <div style={{ marginTop: 6, fontSize: 11, color: "#8A8886" }}>
+                    Gestionado por: {maps.user.get(request.triageOwnerUserId) ?? request.triageOwnerUserId}
+                    {request.triageExecutorTeamId && (
+                      <span> · Equipo: {maps.team.get(request.triageExecutorTeamId) ?? request.triageExecutorTeamId}</span>
+                    )}
+                    {request.triageExecutorUserId && (
+                      <span> · Responsable: {maps.user.get(request.triageExecutorUserId) ?? request.triageExecutorUserId}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Nota legacy (si no hay triage nuevo) */}
+            {request.triageNote && !request.triageDecision && !canTriage && (
               <div style={{
                 padding: "10px 14px", background: "#FAF9F8", border: "1px solid #EDEBE9",
                 borderRadius: 6, fontSize: 13, color: "#201F1E", lineHeight: 1.6,
@@ -542,7 +1001,7 @@ export const RequestDrawer: React.FC<Props> = ({
               </div>
             )}
 
-            {!canTriage && !request.triageNote && (
+            {!canTriage && !request.triageNote && !request.triageDecision && (
               <p style={{ color: "#8A8886", fontSize: 13 }}>
                 Solicitud en estado <strong>{request.status}</strong> — no hay acciones de triage disponibles.
               </p>
@@ -550,29 +1009,34 @@ export const RequestDrawer: React.FC<Props> = ({
 
             {canTriage && (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {/* Nota de triage */}
-                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#605E5C" }}>
-                  <span>
-                    Nota{" "}
-                    <span style={{ color: "#D13438" }}>
-                      (obligatoria para Pedir info y Rechazar)
-                    </span>
-                  </span>
-                  <textarea
-                    value={triageNote}
-                    onChange={e => setTriageNote(e.target.value)}
-                    rows={4}
-                    placeholder="Escribe tu nota para el solicitante o el equipo…"
-                    style={{
-                      ...INPUT, resize: "vertical",
-                      borderColor: triageNote ? "#C8C6C4" : "#EDEBE9",
-                    }}
+                {/* CTA principal: abrir wizard */}
+                <div style={{
+                  padding: "16px 18px",
+                  background: "linear-gradient(135deg, #F3F9FF 0%, #EFF6FC 100%)",
+                  border: "1.5px solid #C7E0F4", borderRadius: 10,
+                  display: "flex", flexDirection: "column", gap: 10,
+                }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: "#005A9E", display: "flex", alignItems: "center", gap: 6 }}>
+                    🎯 Triage completo
+                  </div>
+                  <p style={{ margin: 0, fontSize: 12, color: "#605E5C", lineHeight: 1.55 }}>
+                    Clasifica la solicitud, decide su destino y captura toda la información de trazabilidad necesaria.
+                  </p>
+                  <ActionBtn
+                    label="Gestionar triage completo →"
+                    icon={<ArrowRightCircle size={13} />}
+                    accent="#0078D4"
+                    variant="solid"
+                    onClick={() => setShowTriageWizard(true)}
                   />
-                </label>
+                </div>
 
-                {/* Acciones de triage */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {request.status !== "En revisión" && (
+                {/* Acción rápida: tomar en revisión */}
+                {request.status === "Nuevo" && (
+                  <div style={{ borderTop: "1px solid #EDEBE9", paddingTop: 14 }}>
+                    <div style={{ fontSize: 11, color: "#8A8886", marginBottom: 8 }}>
+                      Acciones rápidas
+                    </div>
                     <ActionBtn
                       label="Tomar en revisión"
                       icon={<MessageSquare size={12} />}
@@ -580,52 +1044,14 @@ export const RequestDrawer: React.FC<Props> = ({
                       onClick={() => void doTriage("review")}
                       disabled={saving}
                     />
-                  )}
-                  <ActionBtn
-                    label="Pedir información *"
-                    icon={<HelpCircle size={12} />}
-                    accent="#986F0B"
-                    onClick={() => void doTriage("request-info")}
-                    disabled={saving}
-                  />
-                  {request.status !== "Aprobada" && (
-                    <ActionBtn
-                      label="Aprobar"
-                      icon={<CheckCircle size={12} />}
-                      accent="#107C10"
-                      onClick={() => void doTriage("approve")}
-                      disabled={saving}
-                    />
-                  )}
-                  {request.status !== "Rechazada" && (
-                    <ActionBtn
-                      label="Rechazar *"
-                      icon={<XCircle size={12} />}
-                      accent="#D13438"
-                      onClick={() => void doTriage("reject")}
-                      disabled={saving}
-                    />
-                  )}
-                </div>
-
-                {/* Convertir en tarea */}
-                {canConvert && (
-                  <div style={{ borderTop: "1px solid #EDEBE9", paddingTop: 14 }}>
-                    <ActionBtn
-                      label="Convertir en tarea"
-                      icon={<ArrowRightCircle size={13} />}
-                      accent="#0078D4"
-                      variant="solid"
-                      onClick={onConvert}
-                      disabled={saving}
-                    />
                     <p style={{ margin: "6px 0 0", fontSize: 11, color: "#8A8886" }}>
-                      Crea un WorkItem a partir de esta solicitud aprobada.
+                      Marca la solicitud como "En revisión" sin completar el triage aún.
                     </p>
                   </div>
                 )}
               </div>
             )}
+
           </>
         )}
 
@@ -759,6 +1185,8 @@ export const RequestDrawer: React.FC<Props> = ({
                       setEditDesc(request.description);
                       setEditType(request.type);
                       setEditPrio(request.priority);
+                      setPendingDeleteIds(new Set());
+                      setPendingNewFiles([]);
                     }}
                     disabled={saving}
                   />
@@ -778,6 +1206,22 @@ export const RequestDrawer: React.FC<Props> = ({
       )}
 
     </div>
+      {showTriageWizard && (
+        <TriageWizardModal
+          request={request}
+          appUsers={appUsers}
+          teams={teams}
+          fullProjects={fullProjects}
+          areas={businessAreas}
+          currentUser={currentUser}
+          selectedYear={new Date(request.createdOn).getFullYear()}
+          onClose={() => setShowTriageWizard(false)}
+          onConfirmed={() => {
+            setShowTriageWizard(false);
+            onRefresh();
+          }}
+        />
+      )}
     </>
   );
 };

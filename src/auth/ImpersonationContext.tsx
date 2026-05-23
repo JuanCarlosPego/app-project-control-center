@@ -117,8 +117,12 @@ export const ImpersonationProvider: React.FC<Props> = ({ realUser, children }) =
 
   // Sincronizar el usuario efectivo al bridge para que GET /me lo devuelva.
   // Se ejecuta en cada cambio: al montar (usuario real), al impersonar y al limpiar.
+  // Además actualiza el mock store (solo activo en LOCAL) para que POST/PATCH
+  // de solicitudes y proyectos usen el usuario correcto y no el admin de db.json.
   useEffect(() => {
     setBridgeEffectiveUser(effectiveUser);
+    // Actualiza store.currentUser en los MSW handlers (no-op silencioso en modo Dataverse)
+    apiClient.patch("/me", effectiveUser).catch(() => {/* no-op en modo Dataverse */});
   }, [effectiveUser]);
 
   const value = useMemo<ImpersonationValue>(() => ({

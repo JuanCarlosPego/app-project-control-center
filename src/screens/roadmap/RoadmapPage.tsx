@@ -57,8 +57,8 @@ export const RoadmapPage: React.FC = () => {
   const canAdmin    = roles.includes("Admin") || roles.includes("IT AirEuropa");
   const isProveedor = roles.includes("Proveedor") && !canAdmin;
 
-  // ── Ámbito global (año + área) ────────────────────────
-  const { selectedYear, setYear, selectedAreaId } = useAppFilter();
+  // ── Ámbito global (año + área + proyecto) ─────────────
+  const { selectedYear, setYear, selectedAreaId, selectedProjectId } = useAppFilter();
 
   // ── Carga de datos ────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -92,6 +92,9 @@ export const RoadmapPage: React.FC = () => {
   const filtered = useMemo(() => {
     let list = allProjects;
 
+    // Ámbito global: proyecto específico
+    if (selectedProjectId) list = list.filter((p) => p.id === selectedProjectId);
+
     // Filtro KPI bar (status)
     if (activeStatus) list = list.filter((p) => p.status === activeStatus);
 
@@ -114,7 +117,7 @@ export const RoadmapPage: React.FC = () => {
     );
 
     return list;
-  }, [allProjects, activeStatus, filters, currentUserId]);
+  }, [allProjects, selectedProjectId, activeStatus, filters, currentUserId]);
 
   // ── Lookup maps ─────────────────────────────────────
   const userMap = useMemo(

@@ -20,6 +20,7 @@ import type {
   UIEventAction,
   AppRole,
   User,
+  DraftTask,
 } from "../types/domain";
 
 // ── WorkItems ────────────────────────────────────────────
@@ -27,6 +28,7 @@ export interface WorkItemFilters {
   projectId?: string;
   stateId?: string;
   assignedToRole?: string;
+  requestId?: string;
 }
 
 export const getWorkItems = (filters: WorkItemFilters = {}): Promise<WorkItem[]> => {
@@ -56,6 +58,8 @@ export interface CreateWorkItemPayload {
 
 export const createWorkItem = (payload: CreateWorkItemPayload): Promise<WorkItem> =>
   apiClient.post("/workitems", payload);
+
+export { DraftTask };
 
 export const patchWorkItem = (id: string, payload: PatchWorkItemPayload): Promise<WorkItem> =>
   apiClient.patch(`/workitems/${id}`, payload);

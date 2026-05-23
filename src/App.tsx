@@ -20,6 +20,9 @@ import { StateMachinePage } from "./screens/admin/StateMachinePage";
 import { UsersPage } from "./screens/admin/users/UsersPage";
 import { ProvidersPage } from "./screens/admin/providers/ProvidersPage";
 import { AdminTeamsPage } from "./screens/admin/teams/AdminTeamsPage";
+import { AreasPage }      from "./screens/admin/areas/AreasPage";
+import { AreaDetailPage } from "./screens/admin/areas/AreaDetailPage";
+import { HelpAdminPage }  from "./screens/admin/help/HelpAdminPage";
 import { ActivityPage }  from "./screens/activity/ActivityPage";
 import { EvidencesPage } from "./screens/evidences/EvidencesPage";
 import { ReportsPage }   from "./screens/reports/ReportsPage";
@@ -103,6 +106,9 @@ const App: React.FC = () => (
           <Route path="/admin/users"       element={<ProtectedRoute requiredRoles={["Admin"]}><UsersPage /></ProtectedRoute>} />
           <Route path="/admin/providers"   element={<ProtectedRoute requiredRoles={["Admin"]}><ProvidersPage /></ProtectedRoute>} />
           <Route path="/admin/teams"       element={<ProtectedRoute requiredRoles={["Admin"]}><AdminTeamsPage /></ProtectedRoute>} />
+          <Route path="/admin/areas"       element={<ProtectedRoute requiredRoles={["Admin"]}><AreasPage /></ProtectedRoute>} />
+          <Route path="/admin/areas/:id"   element={<ProtectedRoute requiredRoles={["Admin"]}><AreaDetailPage /></ProtectedRoute>} />
+          <Route path="/admin/help"         element={<ProtectedRoute requiredRoles={["Admin"]}><HelpAdminPage /></ProtectedRoute>} />
           <Route path="/admin/settings"      element={<ProtectedRoute requiredRoles={["Admin"]}><AdminSettingsPage /></ProtectedRoute>} />
           <Route path="/admin/permissions"   element={<ProtectedRoute requiredRoles={["Admin"]}><AdminPermissionsPage /></ProtectedRoute>} />
           <Route path="/admin/profiles"      element={<ProtectedRoute requiredRoles={["Admin"]}><AdminProfilesPage /></ProtectedRoute>} />

@@ -20,6 +20,7 @@ import {
   getWorkItems, getStates, getTransitions, patchWorkItemState,
   getSettings, logUIEvent,
 } from "../../services/workItemService";
+import { recalculateRequestProgress } from "../../services/requestProgressService";
 import { listAppUsers } from "../../services/userService";
 import { getProjects } from "../../services/projectService";
 import { listTeams }   from "../../services/teamService";
@@ -689,6 +690,12 @@ export const KanbanPage: React.FC = () => {
         prev.map((wi) => (wi.id === workItemId ? { ...wi, ...updated } : wi)),
       );
       setDrawerItem((di) => (di?.id === workItemId ? { ...di, ...updated } : di));
+
+      // Si el workItem proviene de una solicitud, recalcular su progreso
+      const reqId = (updated as WorkItem & { requestId?: string | null }).requestId;
+      if (reqId) {
+        recalculateRequestProgress(reqId).catch(() => {/* silent — no bloquea UI */});
+      }
 
       // Simular latencia sync Jira
       await new Promise((r) => setTimeout(r, 1500));

@@ -15,7 +15,9 @@ import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useState,
 } from "react";
 import { getBusinessAreas, getProjects } from "../services/projectService";
+import { getAreasByUser, getPOAreas } from "../services/businessAreaService";
 import type { BusinessArea, Project } from "../types/domain";
+import { useEffectiveUser } from "../auth/ImpersonationContext";
 
 // ── localStorage helpers ──────────────────────────────────
 const SK_YEAR    = "pcc:filter:year";
@@ -40,6 +42,9 @@ export interface AppFilterContextValue {
 
   // Catálogos derivados (para dropdowns)
   areas:           BusinessArea[];
+  /** Áreas filtradas por las relaciones del usuario efectivo (membresía / PO).
+   *  Admin e IT ven todas. Los demás solo ven las áreas a las que pertenecen. */
+  visibleAreas:    BusinessArea[];
   projectsInScope: Project[];  // proyectos en el año + área seleccionados
 
   // Setters con cascade
@@ -57,6 +62,7 @@ const AppFilterContext = createContext<AppFilterContextValue>({
   selectedAreaId:    "",
   selectedProjectId: "",
   areas:           [],
+  visibleAreas:    [],
   projectsInScope: [],
   setYear:      () => undefined,
   setArea:      () => undefined,
@@ -68,6 +74,9 @@ const AppFilterContext = createContext<AppFilterContextValue>({
 // ── AppFilterProvider ─────────────────────────────────────
 export const AppFilterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
+  // Usuario efectivo (respeta impersonación)
+  const { user: effectiveUser } = useEffectiveUser();
+
   // Restaurar desde localStorage
   const [selectedYear, _setYear] = useState<number>(() => {
     const y = parseInt(readLS(SK_YEAR, String(THIS_YEAR)), 10);
@@ -77,9 +86,10 @@ export const AppFilterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [selectedProjectId, _setProject] = useState(() => readLS(SK_PROJECT, ""));
 
   // Catálogos
-  const [areas,       setAreas]       = useState<BusinessArea[]>([]);
-  const [allProjects, setAllProjects] = useState<Project[]>([]);
-  const [loading,     setLoading]     = useState(true);
+  const [areas,        setAreas]        = useState<BusinessArea[]>([]);
+  const [visibleAreas, setVisibleAreas] = useState<BusinessArea[]>([]);
+  const [allProjects,  setAllProjects]  = useState<Project[]>([]);
+  const [loading,      setLoading]      = useState(true);
 
   // Carga de catálogos al montar (una sola vez)
   useEffect(() => {
@@ -93,6 +103,44 @@ export const AppFilterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       .finally(() => setLoading(false));
   }, []);
 
+  // ── Áreas visibles según rol del usuario efectivo ─────
+  // Admin e IT AirEuropa ven el catálogo completo.
+  // El resto ve únicamente las áreas donde tienen membresía (Member/KeyUser) o son PO.
+  useEffect(() => {
+    if (areas.length === 0) return;
+
+    const role = effectiveUser.role;
+    if (role === "Admin" || role === "IT AirEuropa") {
+      setVisibleAreas(areas);
+      return;
+    }
+
+    Promise.all([
+      getAreasByUser(effectiveUser.id),
+      getPOAreas(effectiveUser.id),
+    ])
+      .then(([memberAreas, poAreas]) => {
+        const ids = new Set([
+          ...memberAreas.map((a) => a.id),
+          ...poAreas.map((a) => a.id),
+        ]);
+        setVisibleAreas(areas.filter((a) => ids.has(a.id)));
+      })
+      .catch(() => setVisibleAreas(areas)); // fallback: mostrar todas si falla
+  }, [areas, effectiveUser.id, effectiveUser.role]);
+
+  // Si el área seleccionada ya no está en las visibles, limpiarla
+  useEffect(() => {
+    if (
+      selectedAreaId &&
+      visibleAreas.length > 0 &&
+      !visibleAreas.some((a) => a.id === selectedAreaId)
+    ) {
+      _setArea("");
+      writeLS(SK_AREA, "");
+    }
+  }, [visibleAreas, selectedAreaId]);
+
   // Proyectos en ámbito (año + área) — para el dropdown de proyecto y validación cascade
   const projectsInScope = useMemo<Project[]>(() => {
     // El año se deriva SOLO de startDate (no endDate) — fuente de verdad del spec.
@@ -100,10 +148,16 @@ export const AppFilterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       (p) => p.startDate.startsWith(String(selectedYear)),
     );
     if (selectedAreaId) {
+      // Hay área concreta seleccionada → filtrar a esa área
       list = list.filter((p) => p.businessAreaId === selectedAreaId);
+    } else if (visibleAreas.length > 0 && visibleAreas.length < areas.length) {
+      // Sin área concreta, pero el usuario tiene visibilidad restringida
+      // → mostrar solo proyectos de sus áreas visibles
+      const visibleIds = new Set(visibleAreas.map((a) => a.id));
+      list = list.filter((p) => p.businessAreaId && visibleIds.has(p.businessAreaId));
     }
     return list;
-  }, [allProjects, selectedYear, selectedAreaId]);
+  }, [allProjects, selectedYear, selectedAreaId, visibleAreas, areas.length]);
 
   // Cascade: si el proyecto seleccionado ya no está en ámbito, limpiarlo
   useEffect(() => {
@@ -147,13 +201,13 @@ export const AppFilterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const value = useMemo<AppFilterContextValue>(
     () => ({
       selectedYear, selectedAreaId, selectedProjectId,
-      areas, projectsInScope,
+      areas, visibleAreas, projectsInScope,
       setYear, setArea, setProject, resetFilters,
       loading,
     }),
     [
       selectedYear, selectedAreaId, selectedProjectId,
-      areas, projectsInScope,
+      areas, visibleAreas, projectsInScope,
       setYear, setArea, setProject, resetFilters,
       loading,
     ],

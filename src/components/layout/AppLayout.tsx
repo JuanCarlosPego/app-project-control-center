@@ -4,6 +4,8 @@ import { Sidebar } from "./Sidebar";
 import { TestModeBanner } from "./TestModeBanner";
 import { GlobalFilterBar } from "./GlobalFilterBar";
 import { layout } from "../ui/tokens";
+import { HelpProvider } from "../../context/HelpContext";
+import { HelpPanel, HelpButton } from "../help/HelpPanel";
 
 // ── LayoutMode Context ────────────────────────────────────
 // Pantallas "contained" (Inicio, Usuarios, Config, RBAC): max-width 1100px centrado.
@@ -30,45 +32,51 @@ export const AppLayout: React.FC = () => {
 
   return (
     <LayoutModeContext.Provider value={{ mode, setMode }}>
-      <div style={{
-        display: "flex",
-        height: "100vh",
-        overflow: "hidden",
-        fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
-      }}>
-        {/* Sidebar con scroll propio */}
-        <Sidebar />
-
-        {/* Área principal — única zona de scroll */}
-        <main style={{
-          flex: 1,
-          background: "#FAF9F8",
-          overflowY: "auto",
-          minWidth: 0,
-          height: "100%",
+      <HelpProvider>
+        <div style={{
           display: "flex",
-          flexDirection: "column",
+          height: "100vh",
+          overflow: "hidden",
+          fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
         }}>
-          <TestModeBanner />
-          <GlobalFilterBar />
+          {/* Sidebar con scroll propio */}
+          <Sidebar />
 
-          {/* Contenedor de pantalla */}
-          <div style={{
+          {/* Área principal — única zona de scroll */}
+          <main style={{
             flex: 1,
-            width: "100%",
-            boxSizing: "border-box",
-            ...(mode === "contained"
-              ? {
-                  maxWidth: layout.containedMax,
-                  marginLeft: "auto",
-                  marginRight: "auto",
-                }
-              : {}),
+            background: "#FAF9F8",
+            overflowY: "auto",
+            minWidth: 0,
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
           }}>
-            <Outlet />
-          </div>
-        </main>
-      </div>
+            <TestModeBanner />
+            <GlobalFilterBar />
+
+            {/* Contenedor de pantalla */}
+            <div style={{
+              flex: 1,
+              width: "100%",
+              boxSizing: "border-box",
+              ...(mode === "contained"
+                ? {
+                    maxWidth: layout.containedMax,
+                    marginLeft: "auto",
+                    marginRight: "auto",
+                  }
+                : {}),
+            }}>
+              <Outlet />
+            </div>
+          </main>
+        </div>
+
+        {/* Panel de ayuda y botón flotante — fuera del scroll de main */}
+        <HelpPanel />
+        <HelpButton />
+      </HelpProvider>
     </LayoutModeContext.Provider>
   );
 };

@@ -24,11 +24,52 @@ export type RequestType =
   | "CambioNormativo"
   | "Impedimento";
 
+/**
+ * Urgencia del solicitante:
+ *   inmediato → bloqueo crítico de operación (SLA < 24h)
+ *   semana    → impacto significativo, necesario esta semana
+ *   mes       → planificable antes de fin de mes
+ *   backlog   → mejora sin presión de tiempo
+ */
+export type RequestUrgency = "inmediato" | "semana" | "mes" | "backlog";
+
+// ── Triage extendido ──────────────────────────────────────
+/** Decisión final de triage IT */
+export type TriageDecision =
+  | "approve-backlog"  // Aprobada y deja en backlog (sin convertir aún)
+  | "convert"          // Convertir directamente en WorkItem
+  | "request-info"     // Pedir información al solicitante
+  | "reject";          // Rechazar
+
+/** Categorización interna IT de la solicitud */
+export type TriageCategory = "Bug" | "Evolutivo" | "Integración" | "Reporte" | "Normativa";
+
+/** Estimación de tamaño IT */
+/**(XS <2 días, S 2-5 días, M 1-2 semanas, L >2 semanas)*/  
+export type TriageEstimate = "XS" | "S" | "M" | "L";
+
+/** Motivo de rechazo estandarizado */
+export type TriageReason =
+  | "Fuera alcance"
+  | "Duplicada"
+  | "No viable"
+  | "No prioritario"
+  | "Falta información";
+
+/** Bucket de backlog para solicitudes aprobadas sin convertir */
+export type TriageBacklogBucket =
+  | "Pendiente priorización"
+  | "Plan Q3"
+  | "En espera"
+  | "Sin fecha";
+
 export type RequestStatus =
   | "Nuevo"
   | "En revisión"
   | "Info requerida"
   | "Aprobada"
+  | "En ejecución"
+  | "Resuelta"
   | "Rechazada"
   | "Convertida"
   | "Cancelada";
@@ -40,6 +81,10 @@ export interface Request {
   description: string;
   type: RequestType;
   priority: Priority;
+  /** Urgencia declarada por el solicitante */
+  urgency?: RequestUrgency;
+  /** Área de negocio que origina la solicitud */
+  businessAreaId?: string | null;
   requestedByUserId: string;
   requestedByRole: AppRole;
   /** Team de Área (si solicitante es Usuario) o Provider (si Proveedor) */
@@ -55,12 +100,75 @@ export interface Request {
   convertedWorkItemId: string | null;
   /** Nota al cancelar (opcional) */
   cancelledNote: string | null;
+
+  // ── Triage extendido (gobierno IT) ───────────────────
+  /** Decisión del triage (puede ser borrador) */
+  triageDecision?: TriageDecision | null;
+  /** Categoría interna IT */
+  triageCategory?: TriageCategory | null;
+  /** Prioridad IT (puede diferir de la prioridad del solicitante) */
+  triagePriorityIT?: Priority | null;
+  /** Estimación de tamaño */
+  triageEstimate?: TriageEstimate | null;
+  /** Equipo ejecutor asignado */
+  triageExecutorTeamId?: string | null;
+  /** Responsable individual asignado */
+  triageExecutorUserId?: string | null;
+  /** Motivo de rechazo estandarizado */
+  triageReason?: TriageReason | null;
+  /** Bucket de backlog cuando se aprueba sin convertir */
+  triageBacklogBucket?: TriageBacklogBucket | null;
+  /** true = aprobada y deja en backlog (no convertida aún) */
+  approvedInBacklog?: boolean;
+
+  // ── Progreso calculado a partir de tareas asociadas ──
+  /** 0-100. Calculado automáticamente desde las tareas asociadas */
+  progressPct?: number;
+  /** Número total de tareas asociadas */
+  tasksTotal?: number;
+  /** Número de tareas cerradas (stateId=st-cls) */
+  tasksDone?: number;
+  /** Última vez que se recalculó el progreso (ISO datetime) */
+  lastProgressCalcAt?: string;
+}
+
+/** Adjunto ligado a una solicitud (almacenado en cproroad_requestattachment) */
+export interface RequestAttachment {
+  id: string;
+  requestId: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  /** URL de descarga (Dataverse webresource URL o base64 dataUrl en LOCAL) */
+  url: string;
+  uploadedBy: string;
+  uploadedOn: string;
 }
 
 // ── Catálogos ───────────────────────────────────────────
 export interface BusinessArea {
   id: string;
   name: string;
+  description?: string;
+  /** Si no está presente se trata como activa (retrocompatibilidad) */
+  isActive?: boolean;
+}
+
+// ── Áreas de negocio: membresías y ownership ─────────────
+export type AreaMemberRoleType = "Member" | "KeyUser";
+
+export interface UserAreaMembership {
+  id: string;
+  userId: string;
+  businessAreaId: string;
+  roleType: AreaMemberRoleType;
+}
+
+export interface UserAreaOwnership {
+  id: string;
+  userId: string;
+  businessAreaId: string;
+  roleType: "PO";
 }
 
 /**
@@ -178,6 +286,8 @@ export interface WorkItem {
   tags: string[];
   createdBy: string;
   blockedReason?: string;
+  /** ID de la solicitud de origen (1:N). null si no proviene de solicitud. */
+  requestId?: string | null;
   // ── Integración Jira ────────────────────────────
   jiraIssueKey?: string;
   jiraUrl?: string;
@@ -185,6 +295,23 @@ export interface WorkItem {
   sprintName?: string;
   syncStatus: SyncStatus;
   syncError?: string;
+}
+
+/**
+ * Tarea en borrador para creación masiva desde triage.
+ * Se usa en FullTriagePayload.tasks y en el wizard de conversión multi-tarea.
+ */
+export interface DraftTask {
+  title: string;
+  type: WorkItemType;
+  priority: Priority;
+  stateId: string;
+  assignedToRole: AppRole;
+  assignedToTeamId: string | null;
+  assignedToUserId: string;
+  startDate?: string;
+  endDate?: string;
+  tags?: string[];
 }
 
 export interface Evidence {
@@ -525,4 +652,28 @@ export interface ReportKpis {
   workItemsByState: Record<string, number>;
   blockedWorkItems: number;
   avgProgress: number;
+}
+
+// ── Sistema de ayuda contextual ───────────────────────────
+/**
+ * A qué roles es visible un contenido de ayuda.
+ * "ALL" = todos los roles autenticados.
+ */
+export type HelpRole = "ALL" | AppRole;
+
+/**
+ * Entrada de contenido de ayuda vinculada a una pantalla (screenId).
+ * El campo contentHtml es HTML seguro gestionado solo por Admins.
+ */
+export interface HelpContent {
+  id: string;
+  /** Identificador de la pantalla: "dashboard", "gantt", "admin-users", etc. */
+  screenId: string;
+  title: string;
+  /** Roles que pueden ver este contenido. "ALL" = cualquier usuario. */
+  role: HelpRole;
+  /** HTML del cuerpo de la ayuda. Solo Admins pueden editarlo. */
+  contentHtml: string;
+  isActive: boolean;
+  updatedOn?: string;
 }

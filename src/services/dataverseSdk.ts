@@ -192,3 +192,41 @@ export const sdkDelete = (
     }
     return { id };
   });
+
+/** Subida de archivo a columna File/Image de Dataverse. Serializada. */
+export const sdkUploadFile = (
+  entity: string,
+  id: string,
+  columnName: string,
+  fileName: string,
+  data: string | Uint8Array | ArrayBuffer | Blob,
+): Promise<void> =>
+  enqueueWrite(async () => {
+    const result = await getSdkClient().uploadFileToRecord(
+      toEntitySet(entity),
+      id,
+      columnName,
+      fileName,
+      data,
+    );
+    if (!result.success) {
+      throw new Error(result.error?.message ?? `[dataverseSdk] UPLOAD FILE ${entity}(${id}) falló`);
+    }
+  });
+
+/** Descarga de archivo desde columna File/Image de Dataverse. Paralela (sin cola). */
+export const sdkDownloadFile = async (
+  entity: string,
+  id: string,
+  columnName: string,
+): Promise<Uint8Array> => {
+  const result = await getSdkClient().downloadFileFromRecord(
+    toEntitySet(entity),
+    id,
+    columnName,
+  );
+  if (!result.success) {
+    throw new Error(result.error?.message ?? `[dataverseSdk] DOWNLOAD FILE ${entity}(${id}) falló`);
+  }
+  return result.data;
+};

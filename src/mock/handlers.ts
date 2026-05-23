@@ -24,6 +24,10 @@ import type {
   ActionRequest,
   Team,
   AppUser,
+  BusinessArea,
+  UserAreaMembership,
+  UserAreaOwnership,
+  HelpContent,
 } from "../types/domain";
 
 // ── Carga del mock db ────────────────────────────────────
@@ -527,6 +531,7 @@ export const handlers = [
     const projectId = url.searchParams.get("projectId") ?? "";
     const stateId = url.searchParams.get("stateId") ?? "";
     const assignedToRole = url.searchParams.get("assignedToRole") ?? "";
+    const requestId = url.searchParams.get("requestId") ?? "";
 
     const visibleProjectIds = new Set(visibleProjects().map((p) => p.id));
     let items = (store.workItems as WorkItem[]).filter((w) => visibleProjectIds.has(w.projectId));
@@ -534,6 +539,7 @@ export const handlers = [
     if (projectId)     items = items.filter((w) => w.projectId === projectId);
     if (stateId)       items = items.filter((w) => w.stateId === stateId);
     if (assignedToRole) items = items.filter((w) => w.assignedToRole === assignedToRole);
+    if (requestId)     items = items.filter((w) => (w as WorkItem & { requestId?: string }).requestId === requestId);
 
     return ok(items);
   }),
@@ -704,7 +710,39 @@ export const handlers = [
     return ok(store.workItems[itemIndex]);
   }),
 
-  // ── GET /api/activity ────────────────────────────────
+  // ── POST /api/requests/:id/recalculate-progress ──────
+  // Recalcula progreso de la solicitud a partir de sus tareas.
+  // Invocado por requestProgressService después de un cambio de estado en KanbanPage.
+  http.post("/api/requests/:id/recalculate-progress", ({ params }) => {
+    const reqIdx = (store.requests as typeof store.requests).findIndex(r => r.id === params.id);
+    if (reqIdx === -1) return err(404, "Solicitud no encontrada");
+
+    const tasks = (store.workItems as (WorkItem & { requestId?: string })[])
+      .filter((w) => w.requestId === params.id);
+
+    const total  = tasks.length;
+    const done   = tasks.filter((w) => w.stateId === "st-cls").length;
+    const pct    = total === 0 ? 0 : Math.round((done / total) * 100);
+    const now    = new Date().toISOString();
+
+    const req = store.requests[reqIdx];
+    let newStatus: string = req.status;
+    if (total > 0) {
+      newStatus = done === total ? "Resuelta" : "En ejecución";
+    }
+
+    const updated = {
+      ...req,
+      progressPct:        pct,
+      tasksTotal:         total,
+      tasksDone:          done,
+      lastProgressCalcAt: now,
+      status:             newStatus,
+      updatedOn:          now,
+    };
+    (store.requests as typeof store.requests)[reqIdx] = updated as typeof store.requests[0];
+    return ok(updated);
+  }),
   http.get("/api/activity", ({ request }) => {
     const url        = new URL(request.url);
     const projectId  = url.searchParams.get("projectId")  ?? "";
@@ -1585,6 +1623,16 @@ export const handlers = [
   // ── GET /api/me ──────────────────────────────────────
   http.get("/api/me", () => ok(store.currentUser)),
 
+  // ── PATCH /api/me (impersonación: sincroniza usuario activo en mock) ──
+  // Llamado desde ImpersonationContext cuando el usuario efectivo cambia.
+  // Permite que POST/PATCH de solicitudes, proyectos, etc. usen el usuario
+  // correcto en lugar del admin estático de db.json.
+  http.patch("/api/me", async ({ request }) => {
+    const user = await request.json() as AppUser;
+    (store as unknown as { currentUser: AppUser }).currentUser = user;
+    return ok(user);
+  }),
+
   // ─────────────────────────────────────────────────────
   //  ADMINISTRACIÓN
   // ─────────────────────────────────────────────────────
@@ -2194,6 +2242,8 @@ export const handlers = [
       description:         String(body.description ?? ""),
       type:                body.type,
       priority:            body.priority,
+      urgency:             body.urgency ?? null,
+      businessAreaId:      body.businessAreaId ?? null,
       requestedByUserId:   user.id,
       requestedByRole:     role,
       requestedByTeamId:   body.requestedByTeamId ?? null,
@@ -2207,8 +2257,54 @@ export const handlers = [
       cancelledNote:       null,
     };
 
-    (store.requests as typeof store.requests).push(newReq as typeof store.requests[0]);
+    (store.requests as typeof store.requests).push(newReq as unknown as typeof store.requests[0]);
     return HttpResponse.json(newReq, { status: 201 });
+  }),
+
+  // ── POST /api/requests/:id/attachments ───────────────
+  http.post("/api/requests/:id/attachments", async ({ params, request }) => {
+    const req = (store.requests as typeof store.requests).find(r => r.id === params.id);
+    if (!req) return err(404, "Solicitud no encontrada");
+    const body = await request.json() as Record<string, unknown>;
+    const user = store.currentUser as AppUser;
+    const now  = new Date().toISOString();
+    const att = {
+      id:         genId("att"),
+      requestId:  params.id,
+      name:       String(body.name ?? "adjunto"),
+      mimeType:   String(body.mimeType ?? "application/octet-stream"),
+      sizeBytes:  Number(body.sizeBytes ?? 0),
+      url:        String(body.dataUrl ?? ""),
+      uploadedBy: user.id,
+      uploadedOn: now,
+    };
+    // Guardamos en un array auxiliar del store (si existe); sino, solo respondemos 201
+    if (!("requestAttachments" in store)) {
+      (store as unknown as Record<string, unknown[]>).requestAttachments = [];
+    }
+    (store as unknown as Record<string, unknown[]>).requestAttachments.push(att);
+    return HttpResponse.json(att, { status: 201 });
+  }),
+
+  // ── GET /api/requests/:id/attachments ────────────────
+  http.get("/api/requests/:id/attachments", ({ params }) => {
+    const list = ("requestAttachments" in store)
+      ? (store as unknown as Record<string, unknown[]>).requestAttachments.filter(
+          (a: unknown) => (a as { requestId: string }).requestId === params.id,
+        )
+      : [];
+    return ok(list);
+  }),
+
+  // ── DELETE /api/requests/:id/attachments/:attId ───────
+  http.delete("/api/requests/:id/attachments/:attId", ({ params }) => {
+    if (!("requestAttachments" in store)) return new HttpResponse(null, { status: 204 });
+    const arr = (store as unknown as Record<string, unknown[]>).requestAttachments;
+    const idx = arr.findIndex(
+      (a: unknown) => (a as { id: string }).id === params.attId,
+    );
+    if (idx !== -1) arr.splice(idx, 1);
+    return new HttpResponse(null, { status: 204 });
   }),
 
   // ── PATCH /api/requests/:id ──────────────────────────
@@ -2241,8 +2337,12 @@ export const handlers = [
   }),
 
   // ── POST /api/requests/:id/triage ───────────────────
-  // IT/Admin toman la solicitud y cambian su estado.
-  // body: { action: "review"|"request-info"|"approve"|"reject", note?: string }
+  // Soporta dos formatos:
+  //   legacy  → { action: "review"|"request-info"|"approve"|"reject", note? }
+  //   wizard  → { decision: "approve-backlog"|"convert"|"request-info"|"reject",
+  //               draft?, note?, category?, priorityIT?, estimate?,
+  //               projectId?, wiTitle?, wiType?, executorTeamId?, executorUserId?,
+  //               initialStateId?, backlogBucket?, reason? }
   http.post("/api/requests/:id/triage", async ({ params, request }) => {
     const user = store.currentUser as AppUser;
     const role = (user.role ?? (user as unknown as { roles: string[] }).roles?.[0]) as AppRole;
@@ -2253,33 +2353,228 @@ export const handlers = [
     const idx = (store.requests as typeof store.requests).findIndex(r => r.id === params.id);
     if (idx === -1) return err(404, "Solicitud no encontrada");
 
-    const body = await request.json() as { action: string; note?: string };
+    const body = await request.json() as {
+      action?: string;
+      decision?: string;
+      draft?: boolean;
+      note?: string;
+      category?: string;
+      priorityIT?: string;
+      estimate?: string;
+      projectId?: string;
+      wiTitle?: string;
+      wiType?: string;
+      executorTeamId?: string;
+      executorUserId?: string;
+      initialStateId?: string;
+      backlogBucket?: string;
+      reason?: string;
+    };
+
+    const now = new Date().toISOString();
+    const req = store.requests[idx];
+
+    // ── WIZARD FORMAT ────────────────────────────────────
+    if (body.decision) {
+      const { decision, draft, note, category, priorityIT, estimate,
+              projectId, wiTitle, wiType, executorTeamId, executorUserId,
+              initialStateId, backlogBucket, reason } = body;
+      const tasks = (body as unknown as { tasks?: unknown[] }).tasks ?? null;
+
+      if (!draft) {
+        if (decision === "request-info" && !note?.trim()) {
+          return err(400, "La nota de información es obligatoria");
+        }
+        if (decision === "reject" && !note?.trim()) {
+          return err(400, "El motivo de rechazo es obligatorio");
+        }
+        if (decision === "reject" && !reason) {
+          return err(400, "El motivo de rechazo estandarizado es obligatorio");
+        }
+        if ((decision === "approve-backlog" || decision === "convert") && (!category || !priorityIT)) {
+          return err(400, "Categoría y prioridad IT son obligatorias");
+        }
+        if (decision === "convert") {
+          if (tasks && tasks.length > 0) {
+            // multi-task: validar que todas las tareas tengan título y proyecto
+            const anyMissingTitle = (tasks as Array<{ title?: string; projectId?: string }>).some(
+              (t) => !t.title?.trim() || !t.projectId,
+            );
+            if (anyMissingTitle) return err(400, "Todas las tareas deben tener título y proyecto");
+          } else {
+            // single-task (legado): validar campos únicos
+            if (!projectId) return err(400, "El proyecto destino es obligatorio para convertir");
+            if (!executorTeamId || !executorUserId) {
+              return err(400, "El equipo y responsable ejecutor son obligatorios");
+            }
+          }
+        }
+      }
+
+      const triageFields = {
+        triageOwnerUserId:    user.id,
+        triageNote:           note ?? req.triageNote ?? null,
+        triageDecision:       decision ?? null,
+        triageCategory:       category ?? null,
+        triagePriorityIT:     priorityIT ?? null,
+        triageEstimate:       estimate ?? null,
+        triageExecutorTeamId: executorTeamId ?? null,
+        triageExecutorUserId: executorUserId ?? null,
+        triageReason:         reason ?? null,
+        triageBacklogBucket:  backlogBucket ?? null,
+        updatedOn:            now,
+      };
+
+      if (draft) {
+        const updated = { ...req, ...triageFields };
+        (store.requests as typeof store.requests)[idx] = updated as typeof store.requests[0];
+        return ok(updated);
+      }
+
+      if (decision === "approve-backlog") {
+        const updated = { ...req, ...triageFields, status: "Aprobada", approvedInBacklog: true };
+        (store.requests as typeof store.requests)[idx] = updated as typeof store.requests[0];
+        return ok(updated);
+      }
+
+      if (decision === "request-info") {
+        const updated = { ...req, ...triageFields, status: "Info requerida", approvedInBacklog: false };
+        (store.requests as typeof store.requests)[idx] = updated as typeof store.requests[0];
+        return ok(updated);
+      }
+
+      if (decision === "reject") {
+        const updated = { ...req, ...triageFields, status: "Rechazada", approvedInBacklog: false };
+        (store.requests as typeof store.requests)[idx] = updated as typeof store.requests[0];
+        return ok(updated);
+      }
+
+      if (decision === "convert") {
+        const typeMap: Record<string, string> = {
+          Bug: "Bug", Feature: "Feature", Mejora: "Feature",
+          Incidencia: "Bug", Consulta: "Spike", CambioNormativo: "TechDebt", Impedimento: "Bug",
+        };
+
+        // ── MULTI-TASK ──────────────────────────────────
+        if (tasks && tasks.length > 0) {
+          type RawTask = {
+            title?: string; type?: string; priority?: string; stateId?: string;
+            assignedToRole?: string; assignedToTeamId?: string | null;
+            assignedToUserId?: string; startDate?: string; endDate?: string;
+            projectId?: string; tags?: string[];
+          };
+          const createdWorkItems: WorkItem[] = [];
+          for (const t of tasks as RawTask[]) {
+            const resolvedType = (t.type ?? typeMap[req.type] ?? "Feature") as WorkItem["type"];
+            const wi: WorkItem = {
+              id:               genId("wi"),
+              code:             `WI-${Math.floor(Math.random() * 9000) + 1000}`,
+              projectId:        t.projectId ?? projectId ?? "",
+              title:            t.title ?? req.title,
+              description:      req.description,
+              type:             resolvedType,
+              priority:         (t.priority ?? priorityIT ?? req.priority) as WorkItem["priority"],
+              stateId:          t.stateId ?? initialStateId ?? "st-new",
+              assignedToRole:   (t.assignedToRole ?? "IT AirEuropa") as WorkItem["assignedToRole"],
+              assignedToTeamId: t.assignedToTeamId ?? executorTeamId ?? null,
+              assignedToUserId: t.assignedToUserId ?? executorUserId ?? user.id,
+              startDate:        t.startDate ?? now.slice(0, 10),
+              endDate:          t.endDate ?? null,
+              tags:             t.tags ?? [],
+              syncStatus:       "OK",
+              blockedReason:    null,
+              requestId:        req.id,
+              createdOn:        now,
+              updatedOn:        now,
+            } as unknown as WorkItem;
+            (store.workItems as WorkItem[]).push(wi);
+            createdWorkItems.push(wi);
+          }
+
+          // Calcular progreso inicial (0% - todas abiertas)
+          const progressFields = {
+            progressPct:        0,
+            tasksTotal:         createdWorkItems.length,
+            tasksDone:          0,
+            lastProgressCalcAt: now,
+          };
+
+          const firstWiId = createdWorkItems[0]?.id ?? null;
+          const updated = {
+            ...req, ...triageFields, ...progressFields,
+            status:              "En ejecución",
+            convertedWorkItemId: firstWiId,
+            approvedInBacklog:   false,
+          };
+          (store.requests as typeof store.requests)[idx] = updated as typeof store.requests[0];
+          return HttpResponse.json({ request: updated, workItems: createdWorkItems }, { status: 201 });
+        }
+
+        // ── SINGLE-TASK (legado) ─────────────────────────
+        if (!projectId) return err(400, "Se requiere projectId");
+        const resolvedWiType = (wiType ?? typeMap[req.type] ?? "Feature") as WorkItem["type"];
+        const newWI: WorkItem = {
+          id:               genId("wi"),
+          code:             `WI-${Math.floor(Math.random() * 9000) + 1000}`,
+          projectId,
+          title:            wiTitle ?? req.title,
+          description:      req.description,
+          type:             resolvedWiType,
+          priority:         (priorityIT ?? req.priority) as WorkItem["priority"],
+          stateId:          initialStateId ?? "st-new",
+          assignedToRole:   "IT AirEuropa",
+          assignedToTeamId: executorTeamId ?? null,
+          assignedToUserId: executorUserId ?? user.id,
+          startDate:        now.slice(0, 10),
+          endDate:          null,
+          tags:             [],
+          syncStatus:       "OK",
+          blockedReason:    null,
+          requestId:        req.id,
+          createdOn:        now,
+          updatedOn:        now,
+        } as unknown as WorkItem;
+
+        (store.workItems as WorkItem[]).push(newWI);
+
+        const progressFields = { progressPct: 0, tasksTotal: 1, tasksDone: 0, lastProgressCalcAt: now };
+        const updated = {
+          ...req, ...triageFields, ...progressFields,
+          status:              "En ejecución",
+          convertedWorkItemId: newWI.id,
+          approvedInBacklog:   false,
+        };
+        (store.requests as typeof store.requests)[idx] = updated as typeof store.requests[0];
+        return HttpResponse.json({ request: updated, workItem: newWI }, { status: 201 });
+      }
+
+      return err(400, `Decisión desconocida: ${decision}`);
+    }
+
+    // ── LEGACY FORMAT ─────────────────────────────────────
     const ACTION_STATUS: Record<string, string> = {
       "review":       "En revisión",
       "request-info": "Info requerida",
       "approve":      "Aprobada",
       "reject":       "Rechazada",
     };
-    const newStatus = ACTION_STATUS[body.action];
+    const newStatus = ACTION_STATUS[body.action ?? ""];
     if (!newStatus) return err(400, `Acción desconocida: ${body.action}`);
 
-    // Nota obligatoria para acciones que la requieren
     if ((body.action === "reject" || body.action === "request-info") && !body.note?.trim()) {
       return err(400, body.action === "reject"
         ? "El motivo de rechazo es obligatorio"
         : "La nota de información es obligatoria");
     }
 
-    const now = new Date().toISOString();
     const updated = {
-      ...store.requests[idx],
-      status:           newStatus,
+      ...req,
+      status:            newStatus,
       triageOwnerUserId: user.id,
-      triageNote:       body.note ?? store.requests[idx].triageNote ?? null,
-      updatedOn:        now,
+      triageNote:        body.note ?? req.triageNote ?? null,
+      updatedOn:         now,
     };
     (store.requests as typeof store.requests)[idx] = updated as typeof store.requests[0];
-
     return ok(updated);
   }),
 
@@ -2685,4 +2980,242 @@ export const handlers = [
     });
     return ok({ ok: true });
   }),
+
+  // ══════════════════════════════════════════════════════════
+  //  ADMIN — BUSINESS AREAS
+  // ══════════════════════════════════════════════════════════
+
+  // ── GET /api/admin/areas ──────────────────────────────────
+  // Soporta ?userId=<id> (áreas donde es miembro)
+  //         ?poUserId=<id> (áreas donde es PO)
+  http.get("/api/admin/areas", ({ request }) => {
+    const url = new URL(request.url);
+    const userId   = url.searchParams.get("userId");
+    const poUserId = url.searchParams.get("poUserId");
+    const areas = (store.businessAreas as BusinessArea[]);
+
+    if (userId) {
+      const memberships = (store.userAreaMemberships as UserAreaMembership[])
+        .filter((m) => m.userId === userId);
+      const areaIds = new Set(memberships.map((m) => m.businessAreaId));
+      return ok(areas.filter((a) => areaIds.has(a.id)));
+    }
+
+    if (poUserId) {
+      const ownerships = (store.userAreaOwnerships as UserAreaOwnership[])
+        .filter((o) => o.userId === poUserId);
+      const areaIds = new Set(ownerships.map((o) => o.businessAreaId));
+      return ok(areas.filter((a) => areaIds.has(a.id)));
+    }
+
+    return ok(areas);
+  }),
+
+  // ── POST /api/admin/areas ─────────────────────────────────
+  http.post("/api/admin/areas", async ({ request }) => {
+    const body = await request.json() as { name?: string; description?: string };
+    if (!body.name?.trim()) return err(400, "El nombre es obligatorio");
+    const duplicate = (store.businessAreas as BusinessArea[]).find(
+      (a) => a.name.toLowerCase() === body.name!.trim().toLowerCase(),
+    );
+    if (duplicate) return err(409, "Ya existe un área con ese nombre");
+
+    const newArea: BusinessArea = {
+      id:          genId("ba"),
+      name:        body.name.trim(),
+      description: body.description?.trim() ?? "",
+      isActive:    true,
+    };
+    (store.businessAreas as BusinessArea[]).push(newArea);
+    return ok(newArea);
+  }),
+
+  // ── GET /api/admin/areas/:id ──────────────────────────────
+  http.get("/api/admin/areas/:id", ({ params }) => {
+    const area = (store.businessAreas as BusinessArea[]).find((a) => a.id === params.id);
+    if (!area) return err(404, "Área no encontrada");
+    return ok(area);
+  }),
+
+  // ── PATCH /api/admin/areas/:id ────────────────────────────
+  http.patch("/api/admin/areas/:id", async ({ params, request }) => {
+    const body = await request.json() as { name?: string; description?: string };
+    const areas = store.businessAreas as BusinessArea[];
+    const idx = areas.findIndex((a) => a.id === params.id);
+    if (idx === -1) return err(404, "Área no encontrada");
+
+    if (body.name?.trim()) {
+      const dup = areas.find(
+        (a) => a.id !== params.id &&
+               a.name.toLowerCase() === body.name!.trim().toLowerCase(),
+      );
+      if (dup) return err(409, "Ya existe un área con ese nombre");
+      areas[idx] = { ...areas[idx], name: body.name.trim() };
+    }
+    if (body.description !== undefined) {
+      areas[idx] = { ...areas[idx], description: body.description };
+    }
+    return ok(areas[idx]);
+  }),
+
+  // ── POST /api/admin/areas/:id/activate ───────────────────
+  http.post("/api/admin/areas/:id/activate", ({ params }) => {
+    const areas = store.businessAreas as BusinessArea[];
+    const idx = areas.findIndex((a) => a.id === params.id);
+    if (idx === -1) return err(404, "Área no encontrada");
+    areas[idx] = { ...areas[idx], isActive: true };
+    return ok(areas[idx]);
+  }),
+
+  // ── POST /api/admin/areas/:id/deactivate ─────────────────
+  http.post("/api/admin/areas/:id/deactivate", ({ params }) => {
+    const areas = store.businessAreas as BusinessArea[];
+    const idx = areas.findIndex((a) => a.id === params.id);
+    if (idx === -1) return err(404, "Área no encontrada");
+    areas[idx] = { ...areas[idx], isActive: false };
+    return ok(areas[idx]);
+  }),
+
+  // ── GET /api/admin/areas/:id/members ─────────────────────
+  http.get("/api/admin/areas/:id/members", ({ params }) => {
+    const memberships = (store.userAreaMemberships as UserAreaMembership[])
+      .filter((m) => m.businessAreaId === params.id);
+    return ok(memberships);
+  }),
+
+  // ── POST /api/admin/areas/:id/members ────────────────────
+  http.post("/api/admin/areas/:id/members", async ({ params, request }) => {
+    const body = await request.json() as { userId?: string; roleType?: string };
+    if (!body.userId) return err(400, "userId es obligatorio");
+    if (!body.roleType || !["Member", "KeyUser"].includes(body.roleType)) {
+      return err(400, "roleType debe ser Member o KeyUser");
+    }
+    const memberships = store.userAreaMemberships as UserAreaMembership[];
+    const existing = memberships.find(
+      (m) => m.userId === body.userId && m.businessAreaId === params.id,
+    );
+    if (existing) return err(409, "El usuario ya es miembro de esta área");
+
+    const newMembership: UserAreaMembership = {
+      id:             genId("uam"),
+      userId:         body.userId,
+      businessAreaId: params.id as string,
+      roleType:       body.roleType as "Member" | "KeyUser",
+    };
+    memberships.push(newMembership);
+    return ok(newMembership);
+  }),
+
+  // ── DELETE /api/admin/areas/:id/members/:membershipId ────
+  http.delete("/api/admin/areas/:id/members/:membershipId", ({ params }) => {
+    const memberships = store.userAreaMemberships as UserAreaMembership[];
+    const idx = memberships.findIndex(
+      (m) => m.id === params.membershipId && m.businessAreaId === params.id,
+    );
+    if (idx === -1) return err(404, "Membresía no encontrada");
+    memberships.splice(idx, 1);
+    return ok({ ok: true });
+  }),
+
+  // ── GET /api/admin/areas/:id/owners ──────────────────────
+  http.get("/api/admin/areas/:id/owners", ({ params }) => {
+    const ownerships = (store.userAreaOwnerships as UserAreaOwnership[])
+      .filter((o) => o.businessAreaId === params.id);
+    return ok(ownerships);
+  }),
+
+  // ── POST /api/admin/areas/:id/owners ─────────────────────
+  http.post("/api/admin/areas/:id/owners", async ({ params, request }) => {
+    const body = await request.json() as { userId?: string };
+    if (!body.userId) return err(400, "userId es obligatorio");
+    const ownerships = store.userAreaOwnerships as UserAreaOwnership[];
+    const existing = ownerships.find(
+      (o) => o.userId === body.userId && o.businessAreaId === params.id,
+    );
+    if (existing) return err(409, "El usuario ya es PO de esta área");
+
+    const newOwnership: UserAreaOwnership = {
+      id:             genId("uao"),
+      userId:         body.userId,
+      businessAreaId: params.id as string,
+      roleType:       "PO",
+    };
+    ownerships.push(newOwnership);
+    return ok(newOwnership);
+  }),
+
+  // ── DELETE /api/admin/areas/:id/owners/:ownershipId ──────
+  http.delete("/api/admin/areas/:id/owners/:ownershipId", ({ params }) => {
+    const ownerships = store.userAreaOwnerships as UserAreaOwnership[];
+    const idx = ownerships.findIndex(
+      (o) => o.id === params.ownershipId && o.businessAreaId === params.id,
+    );
+    if (idx === -1) return err(404, "Ownership no encontrado");
+    ownerships.splice(idx, 1);
+    return ok({ ok: true });
+  }),
+
+  // ══════════════════════════════════════════════════════
+  //  AYUDA CONTEXTUAL
+  // ══════════════════════════════════════════════════════
+
+  // ── GET /api/help/:screenId  (público — cualquier rol) ──
+  // Devuelve la entrada de ayuda activa para la pantalla + rol.
+  // Prioridad: entrada exacta para el rol > entrada "ALL".
+  http.get("/api/help/:screenId", ({ params, request }) => {
+    const items = store.helpContents as HelpContent[];
+    const screenId = params.screenId as string;
+    const url = new URL(request.url);
+    const role = url.searchParams.get("role") ?? "ALL";
+
+    const active = items.filter(
+      (h) => h.screenId === screenId && h.isActive,
+    );
+    // Primero intentar coincidencia exacta de rol; luego fallback a ALL
+    const match =
+      active.find((h) => h.role === role) ??
+      active.find((h) => h.role === "ALL") ??
+      null;
+
+    if (!match) return err(404, "Ayuda no encontrada");
+    return ok(match);
+  }),
+
+  // ── GET /api/admin/help  (Admin — lista completa) ────────
+  http.get("/api/admin/help", () => {
+    return ok(store.helpContents as HelpContent[]);
+  }),
+
+  // ── POST /api/admin/help  (Admin — crear) ────────────────
+  http.post("/api/admin/help", async ({ request }) => {
+    const body = (await request.json()) as Omit<HelpContent, "id">;
+    const items = store.helpContents as HelpContent[];
+    const newItem: HelpContent = {
+      ...body,
+      id:        `help-${Date.now()}`,
+      updatedOn: new Date().toISOString(),
+    };
+    items.push(newItem);
+    return HttpResponse.json(newItem, { status: 201 });
+  }),
+
+  // ── PATCH /api/admin/help/:id  (Admin — actualizar) ──────
+  http.patch("/api/admin/help/:id", async ({ params, request }) => {
+    const items = store.helpContents as HelpContent[];
+    const idx = items.findIndex((h) => h.id === params.id);
+    if (idx === -1) return err(404, "Ayuda no encontrada");
+    const patch = (await request.json()) as Partial<HelpContent>;
+    items[idx] = { ...items[idx], ...patch, id: items[idx].id, updatedOn: new Date().toISOString() };
+    return ok(items[idx]);
+  }),
+
+  // ── DELETE /api/admin/help/:id  (Admin — eliminar) ───────
+  http.delete("/api/admin/help/:id", ({ params }) => {
+    const items = store.helpContents as HelpContent[];
+    const idx = items.findIndex((h) => h.id === params.id);
+    if (idx === -1) return err(404, "Ayuda no encontrada");
+    items.splice(idx, 1);
+    return ok({ ok: true });
+  }),
 ];
+

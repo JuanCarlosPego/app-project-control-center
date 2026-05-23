@@ -25,16 +25,31 @@
   },
 
   "businessAreas": [
-    { "id": "ba-aeronova", "name": "Aeronova" },
-    { "id": "ba-denodo", "name": "Cargas DENODO" },
-    { "id": "ba-catering", "name": "Catering" },
-    { "id": "ba-dirops", "name": "DIROPS" },
-    { "id": "ba-itsgt", "name": "Evolutivo Interno ITSGT" },
-    { "id": "ba-pgi", "name": "Intrucción PGI" },
-    { "id": "ba-interline", "name": "Interline" },
-    { "id": "ba-tcpaea", "name": "Jefatura TCPs AEA" },
-    { "id": "ba-tcpaee", "name": "Jefatura TCPs AEE" },
-    { "id": "ba-dirprod", "name": "DIRPROD" }
+    { "id": "ba-aeronova", "name": "Aeronova",                 "description": "Proyectos relacionados con aeroestructuras y MRO de componentes.",    "isActive": true  },
+    { "id": "ba-denodo",   "name": "Cargas DENODO",            "description": "Integración y gobernanza de datos mediante la plataforma DENODO.",      "isActive": true  },
+    { "id": "ba-catering", "name": "Catering",                 "description": "Gestión del servicio de catering a bordo y proveedores asociados.",      "isActive": true  },
+    { "id": "ba-dirops",   "name": "DIROPS",                   "description": "Dirección de Operaciones: vuelos, tripulaciones y gestión operativa.",    "isActive": true  },
+    { "id": "ba-itsgt",    "name": "Evolutivo Interno ITSGT",  "description": "Evolución continua de sistemas internos de IT de soporte al negocio.",   "isActive": true  },
+    { "id": "ba-pgi",      "name": "Instrucción PGI",          "description": "Planes de formación e instrucción para pilotos y tripulación.",           "isActive": false },
+    { "id": "ba-interline","name": "Interline",                "description": "Acuerdos y facturación interline con aerolíneas partners.",               "isActive": true  },
+    { "id": "ba-tcpaea",   "name": "Jefatura TCPs AEA",        "description": "Gestión de tripulantes de cabina AEA: asignaciones y normativa.",         "isActive": true  },
+    { "id": "ba-tcpaee",   "name": "Jefatura TCPs AEE",        "description": "Gestión de tripulantes de cabina AEE: asignaciones y normativa.",         "isActive": true  },
+    { "id": "ba-dirprod",  "name": "DIRPROD",                  "description": "Dirección de Producto: roadmap, KPIs e indicadores de producción.",       "isActive": true  }
+  ],
+
+  "userAreaMemberships": [
+    { "id": "uam-001", "userId": "au-004", "businessAreaId": "ba-dirops",   "roleType": "KeyUser" },
+    { "id": "uam-002", "userId": "au-004", "businessAreaId": "ba-catering", "roleType": "Member"  },
+    { "id": "uam-003", "userId": "au-010", "businessAreaId": "ba-tcpaea",   "roleType": "KeyUser" },
+    { "id": "uam-004", "userId": "au-010", "businessAreaId": "ba-tcpaee",   "roleType": "Member"  },
+    { "id": "uam-005", "userId": "au-012", "businessAreaId": "ba-denodo",   "roleType": "KeyUser" },
+    { "id": "uam-006", "userId": "au-005", "businessAreaId": "ba-dirprod",  "roleType": "Member"  }
+  ],
+
+  "userAreaOwnerships": [
+    { "id": "uao-001", "userId": "au-004", "businessAreaId": "ba-dirops",  "roleType": "PO" },
+    { "id": "uao-002", "userId": "au-010", "businessAreaId": "ba-tcpaea",  "roleType": "PO" },
+    { "id": "uao-003", "userId": "au-012", "businessAreaId": "ba-denodo",  "roleType": "PO" }
   ],
 
   "teams": [
@@ -618,6 +633,97 @@
       "jiraState": "Blocked",
       "sprintName": "Sprint 14",
       "syncStatus": "OK"
+    },
+
+    {
+      "id": "wi-req009-task1",
+      "projectId": "prj-dirops-01",
+      "requestId": "req-009",
+      "title": "Rediseño componentes frontend del panel de vuelos",
+      "type": "Feature",
+      "priority": "Alta",
+      "stateId": "st-cls",
+      "assignedToRole": "IT AirEuropa",
+      "assignedToTeamId": "team-it",
+      "assignedToUserId": "au-002",
+      "startDate": "2026-05-05",
+      "endDate": "2026-05-12",
+      "progress": 100,
+      "tags": ["Frontend", "Panel"],
+      "createdBy": "au-002",
+      "syncStatus": "OK"
+    },
+    {
+      "id": "wi-req009-task2",
+      "projectId": "prj-dirops-01",
+      "requestId": "req-009",
+      "title": "Optimización backend: soporte +20 vuelos simultáneos",
+      "type": "Feature",
+      "priority": "Alta",
+      "stateId": "st-cls",
+      "assignedToRole": "IT AirEuropa",
+      "assignedToTeamId": "team-it",
+      "assignedToUserId": "au-003",
+      "startDate": "2026-05-05",
+      "endDate": "2026-05-14",
+      "progress": 100,
+      "tags": ["Backend", "Performance"],
+      "createdBy": "au-002",
+      "syncStatus": "OK"
+    },
+    {
+      "id": "wi-req009-task3",
+      "projectId": "prj-dirops-01",
+      "requestId": "req-009",
+      "title": "Pruebas de regresión y aceptación del panel",
+      "type": "Feature",
+      "priority": "Media",
+      "stateId": "st-prog",
+      "assignedToRole": "IT AirEuropa",
+      "assignedToTeamId": "team-it",
+      "assignedToUserId": "au-002",
+      "startDate": "2026-05-13",
+      "endDate": "2026-05-20",
+      "progress": 40,
+      "tags": ["Testing", "QA"],
+      "createdBy": "au-002",
+      "syncStatus": "OK"
+    },
+    {
+      "id": "wi-req010-task1",
+      "projectId": "prj-tcpaea-01",
+      "requestId": "req-010",
+      "title": "ETL histórico turnos 2019-2021",
+      "type": "Feature",
+      "priority": "Media",
+      "stateId": "st-cls",
+      "assignedToRole": "IT AirEuropa",
+      "assignedToTeamId": "team-it",
+      "assignedToUserId": "au-002",
+      "startDate": "2026-03-20",
+      "endDate": "2026-04-15",
+      "progress": 100,
+      "tags": ["ETL", "Migración"],
+      "createdBy": "au-002",
+      "syncStatus": "OK"
+    },
+    {
+      "id": "wi-req010-task2",
+      "projectId": "prj-tcpaea-01",
+      "requestId": "req-010",
+      "title": "ETL histórico turnos 2022-2023",
+      "type": "Feature",
+      "priority": "Media",
+      "stateId": "st-cls",
+      "assignedToRole": "IT AirEuropa",
+      "assignedToTeamId": "team-it",
+      "assignedToUserId": "au-003",
+      "startDate": "2026-04-16",
+      "endDate": "2026-05-10",
+      "progress": 100,
+      "tags": ["ETL", "Migración"],
+      "createdBy": "au-002",
+      "syncStatus": "OK"
     }
   ],
 
@@ -946,6 +1052,70 @@
       "createdOn": "2026-05-13T07:45:00Z",
       "updatedOn": "2026-05-13T08:15:00Z",
       "convertedWorkItemId": "wi-dirops-023"
+    },
+    {
+      "id": "req-009",
+      "year": 2026,
+      "title": "Rediseño del panel de control de vuelos (multi-tarea)",
+      "description": "El panel actual no es responsive y no soporta más de 20 vuelos simultáneos. Necesitamos un rediseño completo: frontend, backend y pruebas.",
+      "type": "Feature",
+      "priority": "Alta",
+      "urgency": "mes",
+      "businessAreaId": "area-dirops",
+      "requestedByUserId": "au-004",
+      "requestedByRole": "Usuario",
+      "requestedByTeamId": "team-dirops",
+      "relatedProjectId": "prj-dirops-01",
+      "status": "En ejecución",
+      "triageOwnerUserId": "au-002",
+      "triageNote": "Aprobado. Se convierte en 3 tareas independientes.",
+      "triageDecision": "convert",
+      "triageCategory": "Evolutivo",
+      "triagePriorityIT": "Alta",
+      "triageEstimate": "L",
+      "triageExecutorTeamId": "team-it",
+      "triageExecutorUserId": "au-002",
+      "createdOn": "2026-05-01T08:00:00Z",
+      "updatedOn": "2026-05-14T10:00:00Z",
+      "convertedWorkItemId": "wi-req009-task1",
+      "cancelledNote": null,
+      "approvedInBacklog": false,
+      "progressPct": 67,
+      "tasksTotal": 3,
+      "tasksDone": 2,
+      "lastProgressCalcAt": "2026-05-14T10:00:00Z"
+    },
+    {
+      "id": "req-010",
+      "year": 2026,
+      "title": "Migración de datos históricos de turnos 2019-2023",
+      "description": "Los datos históricos de turnos deben migrarse al nuevo sistema antes del cierre de año. Se divide en tres scripts de ETL.",
+      "type": "Mejora",
+      "priority": "Media",
+      "urgency": "backlog",
+      "businessAreaId": "area-tcpa",
+      "requestedByUserId": "au-010",
+      "requestedByRole": "Usuario",
+      "requestedByTeamId": "team-tcpaea",
+      "relatedProjectId": null,
+      "status": "Resuelta",
+      "triageOwnerUserId": "au-003",
+      "triageNote": "Convertida en 2 tareas ETL. Ambas completadas.",
+      "triageDecision": "convert",
+      "triageCategory": "Evolutivo",
+      "triagePriorityIT": "Media",
+      "triageEstimate": "M",
+      "triageExecutorTeamId": "team-it",
+      "triageExecutorUserId": "au-002",
+      "createdOn": "2026-03-15T09:00:00Z",
+      "updatedOn": "2026-05-10T16:00:00Z",
+      "convertedWorkItemId": "wi-req010-task1",
+      "cancelledNote": null,
+      "approvedInBacklog": false,
+      "progressPct": 100,
+      "tasksTotal": 2,
+      "tasksDone": 2,
+      "lastProgressCalcAt": "2026-05-10T16:00:00Z"
     }
   ],
 
@@ -986,5 +1156,134 @@
     }
   ],
 
-  "userPermissionOverrides": []
+  "userPermissionOverrides": [],
+
+  "helpContents": [
+    {
+      "id": "help-dashboard",
+      "screenId": "dashboard",
+      "title": "Panel de Inicio — Guía rápida",
+      "role": "ALL",
+      "contentHtml": "<h3>¿Qué es el Panel de Inicio?</h3><p>El <strong>Panel de Inicio</strong> es tu vista centralizada del estado actual del programa. Muestra de un vistazo el número de proyectos activos, bloqueados y cerrados, junto a los KPI más relevantes.</p><h3>Filtros de ámbito</h3><p>Usa la barra superior <strong>Ámbito</strong> para filtrar por año, área de negocio y proyecto específico. Todo el panel se actualiza automáticamente.</p><h3>Accesos rápidos</h3><p>Los KPI son <em>clicables</em>: al hacer clic sobre un estado se navega a la pantalla de Proyectos ya filtrada por ese estado.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-projects",
+      "screenId": "projects",
+      "title": "Proyectos — Guía rápida",
+      "role": "ALL",
+      "contentHtml": "<h3>Vista de Proyectos</h3><p>Aquí se listan todos los proyectos a los que tienes acceso. Puedes alternar entre la vista <strong>Tarjetas</strong> y la vista <strong>Tabla</strong> usando el botón de la esquina superior derecha.</p><h3>Filtros disponibles</h3><ul><li><strong>Búsqueda:</strong> filtra por nombre o código.</li><li><strong>Estado:</strong> Pendiente, En curso, Bloqueado, Cerrado.</li><li><strong>Ejecutor:</strong> IT o Proveedor.</li><li><strong>Solicitadas por mí:</strong> muestra solo tus proyectos.</li></ul><h3>Detalle de proyecto</h3><p>Haz clic en un proyecto para abrir el <em>drawer</em> con sus WorkItems, evidencias y riesgos asociados.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-roadmap",
+      "screenId": "roadmap",
+      "title": "Roadmap — Guía rápida",
+      "role": "ALL",
+      "contentHtml": "<h3>¿Qué es el Roadmap?</h3><p>El Roadmap ofrece una visión estratégica de todos los proyectos activos, agrupados principalmente por área de negocio. Permite entender rápidamente qué iniciativas están en marcha y cómo evolucionan en el conjunto del programa.</p><h3>¿Para qué sirve?</h3><ul><li>Responder a la pregunta: <strong>¿Qué estamos haciendo?</strong></li><li>Ver claramente <strong>dónde</strong> se están desarrollando las iniciativas (por área)</li><li>Identificar <strong>en qué estado</strong> se encuentra cada proyecto</li><li>Detectar <strong>problemas, bloqueos y riesgos</strong> de forma inmediata</li><li>Entender <strong>quién es el responsable</strong> de cada iniciativa</li></ul><h3>¿Qué tipo de información ofrece?</h3><ul><li>Estado de los proyectos (En curso, Pendiente, Bloqueado, Cerrado)</li><li>Área de negocio asociada</li><li>Responsable y equipo ejecutor (IT o proveedor)</li><li>Prioridad de cada iniciativa</li><li>Fechas clave (inicio y fin, orientativas)</li><li>Alertas visuales (vencimientos, bloqueos, incidencias)</li></ul><h3>¿Qué preguntas responde?</h3><ul><li><strong>¿Qué estamos haciendo actualmente?</strong></li><li><strong>¿En qué áreas estamos invirtiendo esfuerzo?</strong></li><li><strong>¿Cómo va cada proyecto?</strong></li><li><strong>¿Qué iniciativas presentan problemas?</strong></li><li><strong>¿Quién lidera cada proyecto?</strong></li></ul><h3>¿Cuándo deberías usar esta pantalla?</h3><ul><li>Revisiones con negocio o Product Owners (PO)</li><li>Comités de seguimiento</li><li>Visión ejecutiva del estado del programa</li><li>Priorización de iniciativas</li></ul><h3>Claves importantes</h3><ul><li>El Roadmap es una vista <strong>estratégica</strong>, no de planificación detallada</li><li>No muestra dependencias ni planificación fina</li><li>Su objetivo es facilitar la toma de decisiones</li><li>Debe utilizarse como punto de entrada para analizar proyectos</li></ul><p><strong>En resumen:</strong> El Roadmap responde a <em>qué estamos haciendo y cómo va</em>, proporcionando una visión clara, sintetizada y orientada a negocio.</p><h3>Diferencia con el Gantt</h3><p>A diferencia del Gantt, el Roadmap no se centra en las fechas exactas, sino en proporcionar una visión global del estado del programa. Es la herramienta adecuada para entender <strong>qué se está haciendo y cómo evoluciona</strong>.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-gantt",
+      "screenId": "gantt",
+      "title": "Gantt — Guía rápida",
+      "role": "ALL",
+      "contentHtml": "<h3>¿Qué es el Gantt?</h3><p>El Gantt es una herramienta de planificación temporal que permite visualizar los proyectos a lo largo del tiempo, mostrando claramente sus fechas de inicio, fin y duración.</p><h3>¿Para qué sirve?</h3><ul><li>Responder a la pregunta: <strong>¿Cuándo ocurre cada cosa?</strong></li><li>Planificar proyectos en el tiempo</li><li>Visualizar la duración de las iniciativas</li><li>Entender solapamientos entre proyectos</li><li>Identificar retrasos o desviaciones</li></ul><h3>¿Qué tipo de información ofrece?</h3><ul><li>Timeline completo de proyectos</li><li>Fechas de inicio y fin</li><li>Duración de cada iniciativa</li><li>Estado actual (En curso, Bloqueado, etc.)</li><li>Progreso (% completado)</li><li>Línea temporal actual (hoy)</li></ul><h3>¿Qué preguntas responde?</h3><ul><li><strong>¿Cuándo empieza y termina cada proyecto?</strong></li><li><strong>¿Qué proyectos están en paralelo?</strong></li><li><strong>¿Qué iniciativas están retrasadas?</strong></li><li><strong>¿Qué carga de trabajo hay en cada periodo?</strong></li></ul><h3>¿Cuándo deberías usar esta pantalla?</h3><ul><li>Planificación de proyectos</li><li>Seguimiento temporal detallado</li><li>Análisis de solapamientos y carga</li><li>Gestión de entregas y fechas clave</li></ul><h3>Claves importantes</h3><ul><li>El Gantt es una vista <strong>operativa y temporal</strong></li><li>No está orientado a negocio, sino a planificación</li><li>No sustituye al Roadmap, lo complementa</li><li>Requiere datos de fechas fiables</li></ul><p><strong>En resumen:</strong> El Gantt responde a <em>cuándo sucede cada cosa</em>, proporcionando una visión detallada del tiempo y la planificación de los proyectos.</p><h3>Diferencia con el Roadmap</h3><p>Mientras que el Roadmap ofrece una visión estratégica, el Gantt se centra en la planificación temporal. Es la herramienta indicada para analizar <strong>cuándo sucede cada actividad y cómo se distribuye en el tiempo</strong>.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-backlog",
+      "screenId": "backlog",
+      "title": "Backlog — Guía rápida",
+      "role": "ALL",
+      "contentHtml": "<h3>Gestión del Backlog</h3><p>El Backlog lista todos los WorkItems del alcance actual (año + área + proyecto). Aquí puedes crear, editar y priorizar tareas.</p><h3>Columnas principales</h3><ul><li><strong>Código / Título:</strong> identificador único y nombre de la tarea.</li><li><strong>Estado:</strong> refleja el estado actual en la máquina de estados.</li><li><strong>Asignado a:</strong> rol y usuario responsable.</li><li><strong>Fechas:</strong> inicio y fin planificados.</li></ul><h3>Creación rápida</h3><p>Usa el botón <strong>+ WorkItem</strong> para crear nuevas tareas vinculadas a un proyecto.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-kanban",
+      "screenId": "kanban",
+      "title": "Kanban — Guía rápida",
+      "role": "ALL",
+      "contentHtml": "<h3>Tablero Kanban</h3><p>El tablero Kanban organiza los WorkItems en columnas según su <strong>estado</strong>. Arrastra las tarjetas entre columnas para avanzar el flujo de trabajo.</p><h3>Transiciones permitidas</h3><p>Solo se permiten las transiciones definidas en la máquina de estados. Si un movimiento no está autorizado, la tarjeta vuelve a su posición original.</p><h3>Evidencias obligatorias</h3><p>Algunas transiciones requieren adjuntar evidencia (comentario, enlace o fichero) antes de confirmar el cambio de estado.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-requests",
+      "screenId": "requests",
+      "title": "Solicitudes — Guía rápida",
+      "role": "ALL",
+      "contentHtml": "<h3>Gestión de Solicitudes</h3><p>Las solicitudes permiten a usuarios y proveedores pedir nuevas funcionalidades, reportar incidencias o proponer mejoras sin acceso directo al backlog.</p><h3>Crear una solicitud</h3><p>Haz clic en <strong>Nueva Solicitud</strong>, selecciona el tipo, indica el área de negocio y describe el requerimiento con el mayor detalle posible.</p><h3>Ciclo de vida</h3><p>Una solicitud pasa por: <em>Nuevo → En revisión → Aprobada / Rechazada → Convertida</em>. Solo el equipo de IT puede aprobar o convertir solicitudes en WorkItems.</p><h3>Urgencia</h3><p>Indica la urgencia real: <em>Inmediato</em> (bloqueo crítico), <em>Esta semana</em>, <em>Este mes</em> o <em>Backlog</em>.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-activity",
+      "screenId": "activity",
+      "title": "Actividad — Guía rápida",
+      "role": "ALL",
+      "contentHtml": "<h3>Registro de Actividad</h3><p>La pantalla de Actividad muestra el historial completo de cambios: cambios de estado, asignaciones, edición de campos y creaciones.</p><h3>Filtros avanzados</h3><p>Filtra por <strong>tipo de acción</strong>, <strong>rol del responsable</strong>, <strong>rango de fechas</strong> y <strong>proyecto específico</strong> usando el selector de ámbito global.</p><h3>Uso recomendado</h3><p>Úsalo junto a la pantalla de Auditoría para análisis más detallados y procesos de compliance.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-evidences",
+      "screenId": "evidences",
+      "title": "Evidencias — Guía rápida",
+      "role": "ALL",
+      "contentHtml": "<h3>Gestión de Evidencias</h3><p>Las evidencias son adjuntos de soporte vinculados a proyectos o WorkItems: <strong>comentarios</strong>, <strong>enlaces</strong> externos o <strong>ficheros</strong>.</p><h3>Añadir evidencia</h3><p>Desde el drawer de un WorkItem o Proyecto, haz clic en <em>Añadir evidencia</em>. Selecciona el tipo, añade el contenido y confirma.</p><h3>Evidencias obligatorias</h3><p>Algunas transiciones de estado exigen adjuntar evidencia antes de confirmar el movimiento. La máquina de estados define cuáles son obligatorias.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-reports",
+      "screenId": "reports",
+      "title": "Informes / KPIs — Guía rápida",
+      "role": "ALL",
+      "contentHtml": "<h3>Informes y KPIs</h3><p>La pantalla de Informes ofrece métricas agregadas del programa: distribución por estado, área, ejecutor y prioridad. Los datos se actualizan según el ámbito seleccionado.</p><h3>Filtros de ámbito</h3><p>Usa la barra superior para acotar el análisis a un año, área o proyecto concreto. Los gráficos y tablas se recalculan automáticamente.</p><h3>Exportación</h3><p>Descarga los datos en CSV usando el botón <em>Exportar</em> en la cabecera de la pantalla.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-risks",
+      "screenId": "risks",
+      "title": "Riesgos y Bloqueos — Guía rápida",
+      "role": "ALL",
+      "contentHtml": "<h3>Gestión de Riesgos</h3><p>Esta pantalla centraliza todos los riesgos y bloqueos del programa. Un riesgo tiene <strong>severidad</strong> (Alta, Media, Baja), <strong>estado</strong> (Abierto, En mitigación, Resuelto) y fecha límite.</p><h3>Crear riesgo</h3><p>Haz clic en <strong>+ Riesgo</strong> para registrar un nuevo impedimento. Vincula el riesgo a un WorkItem para facilitar el seguimiento.</p><h3>Resolución</h3><p>Al resolver un riesgo, añade un comentario de cierre para documentar la solución adoptada.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-audit",
+      "screenId": "audit",
+      "title": "Auditoría — Guía rápida",
+      "role": "ALL",
+      "contentHtml": "<h3>Trazabilidad y Auditoría</h3><p>La pantalla de Auditoría proporciona un log inmutable de todos los cambios realizados en el sistema, con usuario, fecha y valores anterior/posterior.</p><h3>Filtros</h3><p>Filtra por entidad, usuario, rango de fechas o acción específica para localizar el evento que necesitas auditar.</p><h3>Cumplimiento</h3><p>Este registro es fundamental para procesos de compliance y certificaciones. Los datos de auditoría no pueden modificarse ni eliminarse.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-admin",
+      "screenId": "admin",
+      "title": "Administración — Guía rápida",
+      "role": "Admin",
+      "contentHtml": "<h3>Sección de Administración</h3><p>El área de Administración está reservada para usuarios con rol <strong>Admin</strong>. Gestiona todos los aspectos de configuración del sistema.</p><h3>Módulos disponibles</h3><ul><li><strong>Usuarios:</strong> altas, bajas y modificación de roles.</li><li><strong>Equipos:</strong> gestión de equipos de área, IT y proveedores.</li><li><strong>Proveedores:</strong> catálogo de empresas proveedoras externas.</li><li><strong>Áreas:</strong> áreas de negocio y sus miembros/POs.</li><li><strong>Configuración:</strong> parámetros globales de la aplicación.</li><li><strong>Permisos RBAC:</strong> gestión de permisos por rol.</li><li><strong>Máquina de estados:</strong> configuración de flujos de trabajo.</li><li><strong>Ayuda:</strong> gestión del contenido de ayuda contextual por pantalla.</li></ul>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "help-admin-help",
+      "screenId": "admin-help",
+      "title": "Gestión de Ayuda — Guía rápida",
+      "role": "Admin",
+      "contentHtml": "<h3>Gestor de Contenidos de Ayuda</h3><p>Desde aquí puedes crear y editar el contenido de ayuda contextual que se muestra en cada pantalla de la aplicación.</p><h3>Pantallas disponibles</h3><p>Cada entrada de ayuda se asocia a una pantalla mediante su <strong>screenId</strong>. Un mismo screenId puede tener entradas diferenciadas por rol.</p><h3>Editor HTML</h3><p>El contenido se edita en HTML. Usa etiquetas básicas: <code>&lt;h3&gt;</code>, <code>&lt;p&gt;</code>, <code>&lt;ul&gt;</code>, <code>&lt;li&gt;</code>, <code>&lt;strong&gt;</code>, <code>&lt;em&gt;</code>. La previsualización en tiempo real te muestra el resultado final.</p><h3>Visibilidad por rol</h3><p>Usa <strong>ALL</strong> para que todos los usuarios vean la ayuda, o selecciona un rol específico para contenido exclusivo de ese rol.</p>",
+      "isActive": true,
+      "updatedOn": "2026-05-21T00:00:00Z"
+    }
+  ]
 }

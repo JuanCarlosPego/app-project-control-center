@@ -104,8 +104,8 @@ export const ProjectsPage: React.FC = () => {
   // Botón "Nuevo proyecto" controlado por permiso RBAC PROJECT_CREATE
   // (Admin siempre puede; usePermission devuelve true para Admin por bypass)
 
-  // ── Ámbito global (año + área) ──────────────────────────────
-  const { selectedYear, selectedAreaId } = useAppFilter();
+  // ── Ámbito global (año + área + proyecto) ─────────────────
+  const { selectedYear, selectedAreaId, selectedProjectId } = useAppFilter();
 
   // ── Carga de datos ────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -146,6 +146,10 @@ export const ProjectsPage: React.FC = () => {
   // ── Filtrado client-side ──────────────────────────────────
   const filtered = useMemo(() => {
     let list = allProjects;
+
+    // Ámbito global: proyecto específico
+    if (selectedProjectId) list = list.filter((p) => p.id === selectedProjectId);
+
     if (filters.query) {
       const q = filters.query.toLowerCase();
       list = list.filter((p) =>
@@ -165,7 +169,7 @@ export const ProjectsPage: React.FC = () => {
       currentUserId,
     );
     return list;
-  }, [allProjects, filters, currentUserId]);
+  }, [allProjects, selectedProjectId, filters, currentUserId]);
 
   // Lookup maps
   const userMap = useMemo(

@@ -1,0 +1,129 @@
+------------------------------------------
+ROADMAP — HTML BASE
+-----------------------------------------
+<h3>¿Qué es el Roadmap?</h3>
+<p>
+El Roadmap ofrece una visión estratégica de todos los proyectos activos, 
+agrupados principalmente por área de negocio. Permite entender rápidamente 
+qué iniciativas están en marcha y cómo evolucionan en el conjunto del programa.
+</p>
+
+<h3>¿Para qué sirve?</h3>
+<ul>
+  <li>Responder a la pregunta: <strong>¿Qué estamos haciendo?</strong></li>
+  <li>Ver claramente <strong>dónde</strong> se están desarrollando las iniciativas (por área)</li>
+  <li>Identificar <strong>en qué estado</strong> se encuentra cada proyecto</li>
+  <li>Detectar <strong>problemas, bloqueos y riesgos</strong> de forma inmediata</li>
+  <li>Entender <strong>quién es el responsable</strong> de cada iniciativa</li>
+</ul>
+
+<h3>¿Qué tipo de información ofrece?</h3>
+<ul>
+  <li>Estado de los proyectos (En curso, Pendiente, Bloqueado, Cerrado)</li>
+  <li>Área de negocio asociada</li>
+  <li>Responsable y equipo ejecutor (IT o proveedor)</li>
+  <li>Prioridad de cada iniciativa</li>
+  <li>Fechas clave (inicio y fin, orientativas)</li>
+  <li>Alertas visuales (vencimientos, bloqueos, incidencias)</li>
+</ul>
+
+<h3>¿Qué preguntas responde?</h3>
+<ul>
+  <li><strong>¿Qué estamos haciendo actualmente?</strong></li>
+  <li><strong>¿En qué áreas estamos invirtiendo esfuerzo?</strong></li>
+  <li><strong>¿Cómo va cada proyecto?</strong></li>
+  <li><strong>¿Qué iniciativas presentan problemas?</strong></li>
+  <li><strong>¿Quién lidera cada proyecto?</strong></li>
+</ul>
+
+<h3>¿Cuándo deberías usar esta pantalla?</h3>
+<ul>
+  <li>Revisiones con negocio o Product Owners (PO)</li>
+  <li>Comités de seguimiento</li>
+  <li>Visión ejecutiva del estado del programa</li>
+  <li>Priorización de iniciativas</li>
+</ul>
+
+<h3>Claves importantes</h3>
+<ul>
+  <li>El Roadmap es una vista <strong>estratégica</strong>, no de planificación detallada</li>
+  <li>No muestra dependencias ni planificación fina</li>
+  <li>Su objetivo es facilitar la toma de decisiones</li>
+  <li>Debe utilizarse como punto de entrada para analizar proyectos</li>
+</ul>
+
+<p>
+<strong>En resumen:</strong> El Roadmap responde a <em>qué estamos haciendo y cómo va</em>,
+proporcionando una visión clara, sintetizada y orientada a negocio.
+</p>
+<h3>Diferencia con el Gantt</h3>
+<p>
+A diferencia del Gantt, el Roadmap no se centra en las fechas exactas, 
+sino en proporcionar una visión global del estado del programa. 
+Es la herramienta adecuada para entender <strong>qué se está haciendo y cómo evoluciona</strong>.
+</p>
+
+------------------------------------------
+GANTT — HTML BASE
+-----------------------------------------
+
+<h3>¿Qué es el Gantt?</h3>
+<p>
+El Gantt es una herramienta de planificación temporal que permite visualizar 
+los proyectos a lo largo del tiempo, mostrando claramente sus fechas de inicio, 
+fin y duración.
+</p>
+
+<h3>¿Para qué sirve?</h3>
+<ul>
+  <li>Responder a la pregunta: <strong>¿Cuándo ocurre cada cosa?</strong></li>
+  <li>Planificar proyectos en el tiempo</li>
+  <li>Visualizar la duración de las iniciativas</li>
+  <li>Entender solapamientos entre proyectos</li>
+  <li>Identificar retrasos o desviaciones</li>
+</ul>
+
+<h3>¿Qué tipo de información ofrece?</h3>
+<ul>
+  <li>Timeline completo de proyectos</li>
+  <li>Fechas de inicio y fin</li>
+  <li>Duración de cada iniciativa</li>
+  <li>Estado actual (En curso, Bloqueado, etc.)</li>
+  <li>Progreso (% completado)</li>
+  <li>Línea temporal actual (hoy)</li>
+</ul>
+
+<h3>¿Qué preguntas responde?</h3>
+<ul>
+  <li><strong>¿Cuándo empieza y termina cada proyecto?</strong></li>
+  <li><strong>¿Qué proyectos están en paralelo?</strong></li>
+  <li><strong>¿Qué iniciativas están retrasadas?</strong></li>
+  <li><strong>¿Qué carga de trabajo hay en cada periodo?</strong></li>
+</ul>
+
+<h3>¿Cuándo deberías usar esta pantalla?</h3>
+<ul>
+  <li>Planificación de proyectos</li>
+  <li>Seguimiento temporal detallado</li>
+  <li>Análisis de solapamientos y carga</li>
+  <li>Gestión de entregas y fechas clave</li>
+</ul>
+
+<h3>Claves importantes</h3>
+<ul>
+  <li>El Gantt es una vista <strong>operativa y temporal</strong></li>
+  <li>No está orientado a negocio, sino a planificación</li>
+  <li>No sustituye al Roadmap, lo complementa</li>
+  <li>Requiere datos de fechas fiables</li>
+</ul>
+
+<p>
+<strong>En resumen:</strong> El Gantt responde a <em>cuándo sucede cada cosa</em>, 
+proporcionando una visión detallada del tiempo y la planificación de los proyectos.
+</p>
+<h3>Diferencia con el Roadmap</h3>
+<p>
+Mientras que el Roadmap ofrece una visión estratégica, el Gantt 
+se centra en la planificación temporal. Es la herramienta indicada 
+para analizar <strong>cuándo sucede cada actividad y cómo se distribuye en el tiempo</strong>.
+</p>

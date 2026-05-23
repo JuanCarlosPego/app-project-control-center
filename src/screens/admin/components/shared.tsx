@@ -259,13 +259,16 @@ export const newAdminToast = (text: string, ok = true): ToastMsg => ({
   id: ++_adminTid, text, ok,
 });
 
-export const AdminToastContainer: React.FC<{ toasts: ToastMsg[] }> = ({ toasts }) => (
+export const AdminToastContainer: React.FC<{
+  toasts: ToastMsg[];
+  onDismiss?: (id: number) => void;
+}> = ({ toasts, onDismiss }) => (
   <div style={{
     position: "fixed", bottom: 24, right: 24,
     display: "flex", flexDirection: "column", gap: 8, zIndex: 3000,
   }}>
     {toasts.map((t) => (
-      <div key={t.id} style={{
+      <div key={t.id} onClick={() => onDismiss?.(t.id)} style={{ cursor: onDismiss ? "pointer" : "default",
         display: "flex", alignItems: "center", gap: 8,
         padding: "10px 16px", borderRadius: 8,
         background: t.ok ? "#DFF6DD" : "#FDE7E9",

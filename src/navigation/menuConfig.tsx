@@ -3,7 +3,7 @@ import {
   LayoutDashboard, FolderOpen, Map, CalendarRange,
   ListTodo, LayoutGrid, Clock, FileCheck2,
   BarChart2, AlertTriangle, ShieldCheck,
-  Users, Settings, Building2, Network, Inbox, GitBranch, Layers,
+  Users, Settings, Building2, Network, Inbox, GitBranch, Layers, BookOpen,
 } from "lucide-react";
 import type { AppRole } from "../auth/permissions";
 
@@ -77,11 +77,11 @@ export const NAV_ADMIN_ITEM: NavItem = {
     { id: "admin-users",        label: "Usuarios",            route: "/admin/users",        icon: ic(Users),      requiredRoles: ["Admin"] },
     { id: "admin-teams",        label: "Equipos",             route: "/admin/teams",        icon: ic(Network),    requiredRoles: ["Admin"] },
     { id: "admin-providers",    label: "Proveedores",         route: "/admin/providers",    icon: ic(Building2),  requiredRoles: ["Admin"] },
+    { id: "admin-areas",        label: "Áreas",               route: "/admin/areas",        icon: ic(Building2),  requiredRoles: ["Admin"] },
     { id: "admin-settings",     label: "Configuración",       route: "/admin/settings",     icon: ic(Settings),   requiredRoles: ["Admin"] },
     { id: "admin-permissions",  label: "Permisos RBAC",       route: "/admin/permissions",  icon: ic(ShieldCheck), requiredRoles: ["Admin"] },
     { id: "admin-profiles",     label: "Perfiles de Permisos",route: "/admin/profiles",     icon: ic(Layers),     requiredRoles: ["Admin"] },
-    { id: "admin-state-machine",label: "Máquina de estados",  route: "/admin/state-machine",icon: ic(GitBranch),  requiredRoles: ["Admin"] },
-  ],
+    { id: "admin-state-machine",label: "Máquina de estados",  route: "/admin/state-machine",icon: ic(GitBranch),  requiredRoles: ["Admin"] },    { id: "admin-help",          label: "Ayuda contextual",      route: "/admin/help",          icon: ic(BookOpen),    requiredRoles: ["Admin"] },  ],
 };
 
 export const NAV_ADMIN_GROUP: NavGroup = {
